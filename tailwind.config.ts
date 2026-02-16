@@ -47,6 +47,10 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        soft: {
+          DEFAULT: "hsl(var(--soft))",
+          foreground: "hsl(var(--soft-foreground))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -58,8 +62,11 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      boxShadow: {
+        soft: "0 4px 14px 0 rgba(0, 0, 0, 0.25)",
+        "soft-hover": "0 6px 20px 0 rgba(0, 0, 0, 0.35)",
+      },
       borderRadius: {
-        lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
