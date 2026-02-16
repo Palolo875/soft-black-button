@@ -1,0 +1,62 @@
+{
+  "version": 8,
+  "name": "Horizon Serene",
+  "metadata": {
+    "maputnik:renderer": "mlgl"
+  },
+  "sources": {
+    "protomaps": {
+      "type": "vector",
+      "tiles": [
+        "https://api.protomaps.com/tiles/v3/{z}/{x}/{y}.mvt?key=96956795f00e980a"
+      ],
+      "maxzoom": 15,
+      "attribution": "© <a href=\"https://openstreetmap.org\">OpenStreetMap</a> © <a href=\"https://protomaps.com\">Protomaps</a>"
+    }
+  },
+  "glyphs": "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#f8f9f8"
+      }
+    },
+    {
+      "id": "earth",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "earth",
+      "paint": {
+        "fill-color": "#f0f2f0"
+      }
+    },
+    {
+      "id": "landuse",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "landuse",
+      "paint": {
+        "fill-color": [
+          "match",
+          ["get", "class"],
+          "park", "#e1eadb",
+          "scrub", "#e1eadb",
+          "forest", "#d5e0cd",
+          "grass", "#e1eadb",
+          "#f0f2f0"
+        ]
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "protomaps",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#abc9d3"
+      }
+    }
+  ]
+}
