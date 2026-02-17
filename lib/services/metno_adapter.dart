@@ -1,11 +1,13 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:app/services/secure_http_client.dart';
 
 class MetNoAdapter {
   static const _base = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';
 
-  const MetNoAdapter();
+  final SecureHttpClient _http;
+
+  MetNoAdapter({SecureHttpClient? httpClient}) : _http = httpClient ?? SecureHttpClient();
 
   Future<Map<String, dynamic>> fetchCompact({
     required double latitude,
@@ -19,7 +21,7 @@ class MetNoAdapter {
       if (altitude != null) 'altitude': altitude.toString(),
     });
 
-    final response = await http.get(uri, headers: {
+    final response = await _http.get(uri, headers: {
       'User-Agent': userAgent,
     });
     if (response.statusCode != 200) {

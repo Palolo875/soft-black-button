@@ -9,11 +9,11 @@ class WeatherEngine {
   final OpenMeteoAdapter _openMeteo;
   final WeatherCache _cache;
 
-  const WeatherEngine({
-    OpenMeteoAdapter openMeteo = const OpenMeteoAdapter(),
-    WeatherCache cache = const WeatherCache(),
-  })  : _openMeteo = openMeteo,
-        _cache = cache;
+  WeatherEngine({
+    OpenMeteoAdapter? openMeteo,
+    WeatherCache? cache,
+  })  : _openMeteo = openMeteo ?? OpenMeteoAdapter(),
+        _cache = cache ?? WeatherCache(encrypted: true);
 
   static String cacheKeyFor(LatLng p) {
     // Rough grid (~2km) to keep cache size bounded.

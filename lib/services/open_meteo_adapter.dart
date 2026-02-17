@@ -1,9 +1,11 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:app/services/secure_http_client.dart';
 
 class OpenMeteoAdapter {
-  const OpenMeteoAdapter();
+  final SecureHttpClient _http;
+
+  OpenMeteoAdapter({SecureHttpClient? httpClient}) : _http = httpClient ?? SecureHttpClient();
   static const _base = 'https://api.open-meteo.com/v1/forecast';
 
   Future<Map<String, dynamic>> fetchForecast({
@@ -30,7 +32,7 @@ class OpenMeteoAdapter {
       if (models != null) 'models': models,
     });
 
-    final response = await http.get(uri);
+    final response = await _http.get(uri);
     if (response.statusCode != 200) {
       throw Exception('Open-Meteo HTTP ${response.statusCode}');
     }

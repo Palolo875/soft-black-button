@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:app/services/secure_file_store.dart';
 
 class WeatherCacheEntry {
   final DateTime fetchedAt;
@@ -29,10 +30,17 @@ class WeatherCacheEntry {
 
 class WeatherCache {
   static const _folderName = 'horizon_weather_cache';
+  static const _secureEntryPrefix = 'weather_cache_';
 
   final Duration ttl;
+  final bool encrypted;
+  final SecureFileStore _secureStore;
 
-  const WeatherCache({this.ttl = const Duration(minutes: 30)});
+  WeatherCache({
+    this.ttl = const Duration(minutes: 30),
+    this.encrypted = false,
+    SecureFileStore secureStore = const SecureFileStore(),
+  }) : _secureStore = secureStore;
 
   Future<Directory> _dir() async {
     final base = await getApplicationDocumentsDirectory();
@@ -49,6 +57,15 @@ class WeatherCache {
   }
 
   Future<WeatherCacheEntry?> read(String key) async {
+    if (encrypted) {
+      final payload = await _secureStore.readJsonDecrypted('$_secureEntryPrefix$key');
+      if (payload == null) return null;
+      final entry = WeatherCacheEntry.fromJson(payload);
+      if (entry == null) return null;
+      final age = DateTime.now().difference(entry.fetchedAt);
+      if (age > ttl) return null;
+      return entry;
+    }
     final dir = await _dir();
     final file = File('${dir.path}/${_keyToFileName(key)}');
     if (!await file.exists()) return null;
@@ -68,6 +85,11 @@ class WeatherCache {
   }
 
   Future<void> write(String key, Map<String, dynamic> payload) async {
+    if (encrypted) {
+      final entry = WeatherCacheEntry(fetchedAt: DateTime.now(), payload: payload);
+      await _secureStore.writeJsonEncrypted('$_secureEntryPrefix$key', entry.toJson());
+      return;
+    }
     final dir = await _dir();
     final file = File('${dir.path}/${_keyToFileName(key)}');
     final entry = WeatherCacheEntry(fetchedAt: DateTime.now(), payload: payload);

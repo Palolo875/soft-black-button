@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:app/services/secure_http_client.dart';
 
 class ValhallaRouteResult {
   final List<LatLng> shape;
@@ -19,10 +19,13 @@ class ValhallaRouteResult {
 
 class ValhallaClient {
   final Uri base;
+  final SecureHttpClient _http;
 
   ValhallaClient({
     Uri? base,
-  }) : base = base ?? _defaultBase();
+    SecureHttpClient? httpClient,
+  })  : base = base ?? _defaultBase(),
+        _http = httpClient ?? SecureHttpClient();
 
   static Uri _defaultBase() {
     const raw = String.fromEnvironment(
@@ -62,13 +65,13 @@ class ValhallaClient {
 
     final jsonParam = json.encode(req);
     final uri = base.replace(
-      path: '/route',
+      path: (base.path.endsWith('/') ? base.path.substring(0, base.path.length - 1) : base.path) + '/route',
       queryParameters: {
         'json': jsonParam,
       },
     );
 
-    final response = await http.get(uri);
+    final response = await _http.get(uri, config: const SecureHttpConfig(requestTimeout: Duration(seconds: 30)));
     if (response.statusCode != 200) {
       throw Exception('Valhalla HTTP ${response.statusCode}');
     }

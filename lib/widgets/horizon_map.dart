@@ -87,6 +87,9 @@ class _HorizonMapState extends State<HorizonMap> {
       onMapLongClick: (point, latLng) {
         Provider.of<MapProvider>(context, listen: false).setRoutePoint(latLng);
       },
+      onMapClick: (point, latLng) {
+        Provider.of<MapProvider>(context, listen: false).onMapTap(latLng);
+      },
     );
   }
 }

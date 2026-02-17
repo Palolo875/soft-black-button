@@ -7,8 +7,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 class RouteWeatherProjector {
   final WeatherEngineSota _engine;
 
-  const RouteWeatherProjector({WeatherEngineSota engine = const WeatherEngineSota()})
-      : _engine = engine;
+  RouteWeatherProjector({WeatherEngineSota? engine}) : _engine = engine ?? WeatherEngineSota();
 
   Future<List<RouteWeatherSample>> projectAlongPolyline({
     required List<LatLng> polyline,

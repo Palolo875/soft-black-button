@@ -8,7 +8,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:pmtiles/pmtiles.dart' as pm;
 import 'package:app/services/offline_core.dart';
 import 'package:app/services/offline_registry.dart';
-import 'package:http/http.dart' as http;
+import 'package:app/services/secure_http_client.dart';
 
 class OfflineService {
   HttpServer? _pmtilesServer;
@@ -18,6 +18,7 @@ class OfflineService {
   Directory? _proxyCacheDir;
 
   final OfflineCore _offlineCore = OfflineCore();
+  final SecureHttpClient _http = SecureHttpClient();
 
   Future<List<OfflinePack>> listOfflinePacks() async {
     await _offlineCore.registry.pruneMissingFiles();
@@ -244,7 +245,7 @@ class OfflineService {
       _ProxyKind.sprites => Uri.parse('${base.toString()}${relativePath.replaceFirst(RegExp('^/sprites'), '')}'),
     };
     try {
-      final response = await http.get(remoteUri);
+      final response = await _http.get(remoteUri);
       if (response.statusCode != 200) {
         request.response.statusCode = HttpStatus.notFound;
         await request.response.close();

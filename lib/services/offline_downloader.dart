@@ -2,11 +2,17 @@ import 'dart:io';
 
 import 'package:app/services/offline_integrity.dart';
 import 'package:http/http.dart' as http;
+import 'package:app/services/secure_http_client.dart';
 
 class OfflineDownloader {
   final OfflineIntegrity _integrity;
+  final SecureHttpClient _http;
 
-  const OfflineDownloader({OfflineIntegrity integrity = const OfflineIntegrity()}) : _integrity = integrity;
+  OfflineDownloader({
+    OfflineIntegrity integrity = const OfflineIntegrity(),
+    SecureHttpClient? httpClient,
+  })  : _integrity = integrity,
+        _http = httpClient ?? SecureHttpClient();
 
   Future<File> downloadAtomic({
     required Uri url,
@@ -21,7 +27,7 @@ class OfflineDownloader {
     }
 
     final req = http.Request('GET', url);
-    final resp = await req.send();
+    final resp = await _http.send(req);
     if (resp.statusCode != 200) {
       throw Exception('HTTP ${resp.statusCode}');
     }

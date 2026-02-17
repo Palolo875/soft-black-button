@@ -12,17 +12,17 @@ class WeatherEngineSota {
   final WeatherCache _cache;
   final String _metNoUserAgent;
 
-  const WeatherEngineSota({
-    OpenMeteoAdapter openMeteo = const OpenMeteoAdapter(),
-    MetNoAdapter metNo = const MetNoAdapter(),
-    WeatherCache cache = const WeatherCache(),
+  WeatherEngineSota({
+    OpenMeteoAdapter? openMeteo,
+    MetNoAdapter? metNo,
+    WeatherCache? cache,
     String metNoUserAgent = const String.fromEnvironment(
       'METNO_USER_AGENT',
       defaultValue: 'HORIZON/1.0 (+https://example.com/contact)',
     ),
-  })  : _openMeteo = openMeteo,
-        _metNo = metNo,
-        _cache = cache,
+  })  : _openMeteo = openMeteo ?? OpenMeteoAdapter(),
+        _metNo = metNo ?? MetNoAdapter(),
+        _cache = cache ?? WeatherCache(encrypted: true),
         _metNoUserAgent = metNoUserAgent;
 
   static String cacheKeyFor(LatLng p) {

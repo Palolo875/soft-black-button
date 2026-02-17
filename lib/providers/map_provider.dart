@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -12,15 +13,17 @@ import 'package:app/services/route_cache.dart';
 import 'package:app/services/offline_registry.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:app/services/explainability_engine.dart';
+import 'package:app/services/privacy_service.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;
   bool _isStyleLoaded = false;
   final WeatherService _weatherService = WeatherService();
-  final WeatherEngineSota _weatherEngine = const WeatherEngineSota();
-  final RoutingEngine _routingEngine = const RoutingEngine();
-  final RouteCache _routeCache = const RouteCache();
+  final WeatherEngineSota _weatherEngine = WeatherEngineSota();
+  final RoutingEngine _routingEngine = RoutingEngine();
+  final RouteCache _routeCache = RouteCache(encrypted: true);
   final OfflineService _offlineService = OfflineService();
+  final PrivacyService _privacyService = const PrivacyService();
   final ExplainabilityEngine _explainability = const ExplainabilityEngine();
   double _timeOffset = 0.0;
 
@@ -38,6 +41,7 @@ class MapProvider with ChangeNotifier {
   DateTime? _lastRouteComputeAt;
   String? _routeExplanation;
   Map<RouteVariantKind, RouteExplanation> _routeExplanations = const {};
+  RouteWeatherSample? _selectedRouteWeatherSample;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool? _isOnline;
@@ -68,6 +72,7 @@ class MapProvider with ChangeNotifier {
   String? get routeExplanation => _routeExplanation;
   Map<RouteVariantKind, RouteExplanation> get routeExplanations => _routeExplanations;
   RouteExplanation? get currentRouteExplanation => _routeExplanations[_selectedVariant];
+  RouteWeatherSample? get selectedRouteWeatherSample => _selectedRouteWeatherSample;
   double? get offlineDownloadProgress => _offlineDownloadProgress;
   String? get offlineDownloadError => _offlineDownloadError;
   bool get pmtilesEnabled => _pmtilesEnabled;
@@ -113,6 +118,15 @@ class MapProvider with ChangeNotifier {
 
   Future<void> uninstallOfflinePackById(String id) {
     return _offlineService.uninstallPackById(id);
+  }
+
+  Future<LocalDataReport> computeLocalDataReport() {
+    return _privacyService.computeReport();
+  }
+
+  Future<void> panicWipeAllLocalData() async {
+    await clearRoute();
+    await _privacyService.panicWipeAllLocalData();
   }
 
   Future<void> uninstallCurrentPmtilesPack() async {
@@ -204,6 +218,7 @@ class MapProvider with ChangeNotifier {
     _routingError = null;
     _routeExplanation = null;
     _routeExplanations = const {};
+    _selectedRouteWeatherSample = null;
     notifyListeners();
     unawaited(_renderRouteMarkers());
     _routeDebounce?.cancel();
@@ -332,6 +347,7 @@ class MapProvider with ChangeNotifier {
   void selectRouteVariant(RouteVariantKind kind) {
     _selectedVariant = kind;
     _routeExplanation = currentRouteExplanation?.headline ?? _buildExplanationFor(_currentVariant());
+    _selectedRouteWeatherSample = null;
     // _routeExplanations already computed for all variants after routing.
     notifyListeners();
     unawaited(_renderSelectedRoute());
@@ -345,9 +361,57 @@ class MapProvider with ChangeNotifier {
     _routingError = null;
     _routeExplanation = null;
     _routeExplanations = const {};
+    _selectedRouteWeatherSample = null;
     _routeDebounce?.cancel();
     notifyListeners();
     await _clearRouteLayers();
+  }
+
+  void clearSelectedRouteWeatherSample() {
+    if (_selectedRouteWeatherSample == null) return;
+    _selectedRouteWeatherSample = null;
+    notifyListeners();
+  }
+
+  void onMapTap(LatLng tap) {
+    final v = _currentVariant();
+    if (v == null || v.weatherSamples.isEmpty) {
+      clearSelectedRouteWeatherSample();
+      return;
+    }
+
+    RouteWeatherSample? best;
+    double bestMeters = double.infinity;
+    for (final s in v.weatherSamples) {
+      final d = _haversineMeters(tap, s.location);
+      if (d < bestMeters) {
+        bestMeters = d;
+        best = s;
+      }
+    }
+
+    // Simple threshold to avoid accidental selections.
+    const thresholdMeters = 110.0;
+    if (best == null || bestMeters > thresholdMeters) {
+      clearSelectedRouteWeatherSample();
+      return;
+    }
+
+    _selectedRouteWeatherSample = best;
+    notifyListeners();
+  }
+
+  double _haversineMeters(LatLng a, LatLng b) {
+    const r = 6371000.0;
+    final lat1 = a.latitude * 0.017453292519943295;
+    final lat2 = b.latitude * 0.017453292519943295;
+    final dLat = (b.latitude - a.latitude) * 0.017453292519943295;
+    final dLon = (b.longitude - a.longitude) * 0.017453292519943295;
+    final sinDLat = sin(dLat / 2);
+    final sinDLon = sin(dLon / 2);
+    final x = sinDLat * sinDLat + cos(lat1) * cos(lat2) * sinDLon * sinDLon;
+    final c = 2 * atan2(sqrt(x), sqrt(1 - x));
+    return r * c;
   }
 
   String? _buildExplanationFor(RouteVariant? variant) {
@@ -399,6 +463,41 @@ class MapProvider with ChangeNotifier {
           lineOpacity: 0.85,
           lineJoin: 'round',
           lineCap: 'round',
+        ),
+      );
+    } catch (_) {}
+
+    try {
+      await controller.addSource('route-weather-segments', GeojsonSourceProperties(data: _emptyFeatureCollection()));
+    } catch (_) {}
+    try {
+      await controller.addLineLayer(
+        'route-weather-segments',
+        'route-weather-segments-layer',
+        const LineLayerProperties(
+          lineWidth: 8.0,
+          lineJoin: 'round',
+          lineCap: 'round',
+          lineColor: [
+            'interpolate',
+            ['linear'],
+            ['get', 'comfort'],
+            1,
+            '#B55A5A',
+            5,
+            '#FFC56E',
+            10,
+            '#88D3A2',
+          ],
+          lineOpacity: [
+            'interpolate',
+            ['linear'],
+            ['get', 'confidence'],
+            0.25,
+            0.25,
+            0.95,
+            0.85,
+          ],
         ),
       );
     } catch (_) {}
@@ -505,6 +604,7 @@ class MapProvider with ChangeNotifier {
     final variant = _currentVariant();
     if (variant == null) {
       await controller.setGeoJsonSource('route-source', _emptyFeatureCollection());
+      await controller.setGeoJsonSource('route-weather-segments', _emptyFeatureCollection());
       await controller.setGeoJsonSource('route-weather', _emptyFeatureCollection());
       return;
     }
@@ -523,6 +623,30 @@ class MapProvider with ChangeNotifier {
     await controller.setGeoJsonSource('route-source', {
       'type': 'FeatureCollection',
       'features': [line],
+    });
+
+    final segFeatures = <Map<String, dynamic>>[];
+    for (int i = 1; i < variant.weatherSamples.length; i++) {
+      final a = variant.weatherSamples[i - 1];
+      final b = variant.weatherSamples[i];
+      segFeatures.add({
+        'type': 'Feature',
+        'properties': {
+          'comfort': (a.comfortScore + b.comfortScore) / 2.0,
+          'confidence': (a.confidence + b.confidence) / 2.0,
+        },
+        'geometry': {
+          'type': 'LineString',
+          'coordinates': [
+            [a.location.longitude, a.location.latitude],
+            [b.location.longitude, b.location.latitude],
+          ],
+        }
+      });
+    }
+    await controller.setGeoJsonSource('route-weather-segments', {
+      'type': 'FeatureCollection',
+      'features': segFeatures,
     });
 
     final points = variant.weatherSamples
@@ -550,6 +674,7 @@ class MapProvider with ChangeNotifier {
     try {
       await controller.setGeoJsonSource('route-source', _emptyFeatureCollection());
       await controller.setGeoJsonSource('route-markers', _emptyFeatureCollection());
+      await controller.setGeoJsonSource('route-weather-segments', _emptyFeatureCollection());
       await controller.setGeoJsonSource('route-weather', _emptyFeatureCollection());
     } catch (_) {}
   }

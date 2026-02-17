@@ -17,8 +17,8 @@ class OfflineCore {
     OfflineIntegrity? integrity,
     OfflineLru? lru,
   })  : registry = registry ?? OfflineRegistry(),
+        downloader = downloader ?? OfflineDownloader(),
         integrity = integrity ?? const OfflineIntegrity(),
-        downloader = downloader ?? const OfflineDownloader(),
         lru = lru ?? const OfflineLru();
 
   Future<File> installFilePack({

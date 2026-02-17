@@ -7,11 +7,11 @@ class RoutingEngine {
   final ValhallaClient _valhalla;
   final RouteWeatherProjector _projector;
 
-  const RoutingEngine({
-    ValhallaClient valhalla = const ValhallaClient(),
-    RouteWeatherProjector projector = const RouteWeatherProjector(),
-  })  : _valhalla = valhalla,
-        _projector = projector;
+  RoutingEngine({
+    ValhallaClient? valhalla,
+    RouteWeatherProjector? projector,
+  })  : _valhalla = valhalla ?? ValhallaClient(),
+        _projector = projector ?? RouteWeatherProjector();
 
   Future<List<RouteVariant>> computeVariants({
     required LatLng start,

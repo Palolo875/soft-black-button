@@ -190,73 +190,193 @@ class _MapScreenState extends State<MapScreen> {
                 tag: 'status-pill',
                 child: Material(
                   color: Colors.transparent,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(_glassRadius),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        decoration: _glassDecoration(),
-                        child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF88D3A2),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Icon(
-                          mapProvider.weatherError != null
-                              ? Icons.cloud_off_rounded
-                              : (mapProvider.weatherLoading
-                                  ? Icons.cloud_sync_rounded
-                                  : Icons.wb_sunny_rounded),
-                          size: 18,
-                          color: mapProvider.weatherError != null
-                              ? const Color(0xFFB55A5A)
-                              : (mapProvider.weatherLoading
-                                  ? const Color(0xFF4A90A0)
-                                  : const Color(0xFFFFC56E)),
-                        ),
-                        if (mapProvider.isOnline == false) ...[
-                          const SizedBox(width: 6),
-                          const Icon(
-                            Icons.wifi_off_rounded,
-                            size: 16,
-                            color: Color(0xFF6B6B6B),
-                          ),
-                        ],
-                        const SizedBox(width: 8),
-                        Text(
-                          mapProvider.weatherError != null
-                              ? 'Météo indisponible'
-                              : (mapProvider.weatherDecision == null
-                                  ? 'Météo…'
-                                  : '${mapProvider.weatherDecision!.now.temperature.round()}°C  •  confort ${mapProvider.weatherDecision!.comfortScore.toStringAsFixed(1)}/10  •  conf ${(mapProvider.weatherDecision!.confidence * 100).round()}%'),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: -0.2,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        if (mapProvider.isOnline == false) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            'Offline',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.black.withOpacity(0.55),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onLongPress: () async {
+                          final report = await mapProvider.computeLocalDataReport();
+                          if (!context.mounted) return;
+                          await showModalBottomSheet<void>(
+                            context: context,
+                            showDragHandle: true,
+                            builder: (ctx) {
+                              return SafeArea(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Confiance & confidentialité', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                      const SizedBox(height: 12),
+                                      Text('Stockage sécurisé : ${_formatBytes(report.secureStoreBytes)}', style: const TextStyle(fontSize: 12)),
+                                      Text('Cache itinéraires (legacy) : ${_formatBytes(report.routeCacheBytes)}', style: const TextStyle(fontSize: 12)),
+                                      Text('Cache météo (legacy) : ${_formatBytes(report.weatherCacheBytes)}', style: const TextStyle(fontSize: 12)),
+                                      Text('Packs offline : ${_formatBytes(report.offlinePacksBytes)}', style: const TextStyle(fontSize: 12)),
+                                      const SizedBox(height: 8),
+                                      Text('Total : ${_formatBytes(report.totalBytes)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                      const SizedBox(height: 14),
+                                      const Text(
+                                        'HORIZON fonctionne sans compte. Les données restent sur l’appareil.\nLong-press ici pour gérer/effacer rapidement.',
+                                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                                      ),
+                                      const SizedBox(height: 14),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              onPressed: () => Navigator.of(ctx).pop(),
+                                              child: const Text('Fermer'),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: FilledButton(
+                                              onPressed: () async {
+                                                final ok = await showDialog<bool>(
+                                                  context: ctx,
+                                                  builder: (dctx) {
+                                                    return AlertDialog(
+                                                      title: const Text('Effacement rapide ?'),
+                                                      content: const Text('Supprime caches, packs offline et clés locales. Action irréversible.'),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () => Navigator.of(dctx).pop(false),
+                                                          child: const Text('Annuler'),
+                                                        ),
+                                                        FilledButton(
+                                                          onPressed: () => Navigator.of(dctx).pop(true),
+                                                          child: const Text('Effacer'),
+                                                        ),
+                                                      ],
+                                                    );
+                                                  },
+                                                );
+                                                if (ok == true) {
+                                                  await mapProvider.panicWipeAllLocalData();
+                                                  if (ctx.mounted) Navigator.of(ctx).pop();
+                                                }
+                                              },
+                                              child: const Text('Panic wipe'),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(_glassRadius),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                              decoration: _glassDecoration(),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF88D3A2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Icon(
+                                    mapProvider.weatherError != null
+                                        ? Icons.cloud_off_rounded
+                                        : (mapProvider.weatherLoading ? Icons.cloud_sync_rounded : Icons.wb_sunny_rounded),
+                                    size: 18,
+                                    color: mapProvider.weatherError != null
+                                        ? const Color(0xFFB55A5A)
+                                        : (mapProvider.weatherLoading ? const Color(0xFF4A90A0) : const Color(0xFFFFC56E)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    mapProvider.weatherError != null
+                                        ? 'Météo indisponible'
+                                        : (mapProvider.weatherDecision == null
+                                            ? 'Météo…'
+                                            : '${mapProvider.weatherDecision!.now.temperature.round()}°C  •  confort ${mapProvider.weatherDecision!.comfortScore.toStringAsFixed(1)}/10  •  conf ${(mapProvider.weatherDecision!.confidence * 100).round()}%'),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: -0.2,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  if (mapProvider.isOnline == false) ...[
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Offline',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.black.withOpacity(0.55),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
                           ),
-                        ],
+                        ),
+                      ),
+                      if (mapProvider.selectedRouteWeatherSample != null) ...[
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(_glassRadius),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: _glassDecoration(),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Builder(
+                                      builder: (context) {
+                                        final s = mapProvider.selectedRouteWeatherSample!;
+                                        final t = s.snapshot.apparentTemperature.isFinite ? s.snapshot.apparentTemperature : s.snapshot.temperature;
+                                        final rain = s.snapshot.precipitation;
+                                        final wind = s.snapshot.windSpeed;
+                                        final confPct = (s.confidence * 100).round();
+                                        final hh = s.eta.toLocal().hour.toString().padLeft(2, '0');
+                                        final mm = s.eta.toLocal().minute.toString().padLeft(2, '0');
+                                        return Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text('Point météo • ETA $hh:$mm', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'T ${t.toStringAsFixed(0)}°C • pluie ${rain.toStringAsFixed(1)} mm • vent ${wind.toStringAsFixed(1)} m/s • conf $confPct%',
+                                              style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: () => mapProvider.clearSelectedRouteWeatherSample(),
+                                    child: const Icon(Icons.close_rounded, size: 18, color: Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
               ),
