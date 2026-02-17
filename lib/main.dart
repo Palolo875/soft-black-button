@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:app/providers/map_provider.dart';
@@ -80,11 +81,15 @@ class _MapScreenState extends State<MapScreen> {
                 tag: 'status-pill',
                 child: Material(
                   color: Colors.transparent,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.85),
-                      borderRadius: BorderRadius.circular(30),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(30),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.05),
@@ -92,9 +97,9 @@ class _MapScreenState extends State<MapScreen> {
                           offset: const Offset(0, 4),
                         ),
                       ],
-                      border: Border.all(color: Colors.white.withOpacity(0.5)),
-                    ),
-                    child: Row(
+                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                        ),
+                        child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
@@ -117,7 +122,9 @@ class _MapScreenState extends State<MapScreen> {
                             color: Colors.black87,
                           ),
                         ),
-                      ],
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -143,6 +150,48 @@ class _MapScreenState extends State<MapScreen> {
                     backgroundColor: Colors.white,
                     elevation: 2,
                     child: const Icon(Icons.my_location, color: Colors.blueAccent),
+                  ),
+                ),
+
+                // Timeline Slider SOTA 2026
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Maintenant", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                          Text("+${mapProvider.timeOffset.toInt()}h", style: const TextStyle(fontSize: 10, color: Colors.blue)),
+                          const Text("+24h", style: TextStyle(fontSize: 10)),
+                        ],
+                      ),
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 2,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                        ),
+                        child: Slider(
+                          value: mapProvider.timeOffset,
+                          min: 0,
+                          max: 24,
+                          onChanged: (val) => mapProvider.setTimeOffset(val),
+                        ),
+                      ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
 
