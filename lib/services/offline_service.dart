@@ -11,6 +11,9 @@ import 'package:pmtiles/pmtiles.dart' as pm;
 class OfflineService {
   HttpServer? _pmtilesServer;
   pm.PmTilesArchive? _pmtilesArchive;
+  Uri? _proxyRemoteGlyphsBase;
+  Uri? _proxyRemoteSpriteBase;
+  Directory? _proxyCacheDir;
 
   Future<String> downloadPMTiles(String url, String fileName) async {
     if (kIsWeb) {
@@ -50,6 +53,12 @@ class OfflineService {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _pmtilesServer = server;
 
+    final docsDir = await getApplicationDocumentsDirectory();
+    _proxyCacheDir ??= Directory('${docsDir.path}/horizon_cache');
+    if (!await _proxyCacheDir!.exists()) {
+      await _proxyCacheDir!.create(recursive: true);
+    }
+
     // Serve requests.
     unawaited(() async {
       await for (final request in server) {
@@ -64,40 +73,51 @@ class OfflineService {
             continue;
           }
 
-          if (!path.startsWith(tilesPathPrefix)) {
-            request.response.statusCode = HttpStatus.notFound;
+          if (path.startsWith(tilesPathPrefix)) {
+            // Expected: /tiles/{z}/{x}/{y}.pbf
+            final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+            if (segments.length != 4) {
+              request.response.statusCode = HttpStatus.badRequest;
+              await request.response.close();
+              continue;
+            }
+
+            final z = int.tryParse(segments[1]);
+            final x = int.tryParse(segments[2]);
+            final yStr = segments[3];
+            final y = int.tryParse(yStr.endsWith('.pbf') ? yStr.substring(0, yStr.length - 4) : yStr);
+
+            if (z == null || x == null || y == null) {
+              request.response.statusCode = HttpStatus.badRequest;
+              await request.response.close();
+              continue;
+            }
+
+            final tileId = pm.ZXY(z, x, y).toTileId();
+            final tile = await archive.tile(tileId);
+
+            // MapLibre expects raw MVT protobuf bytes.
+            request.response.statusCode = HttpStatus.ok;
+            request.response.headers.contentType = ContentType('application', 'x-protobuf');
+            request.response.headers.set('Access-Control-Allow-Origin', '*');
+            request.response.add(tile.bytes());
             await request.response.close();
             continue;
           }
 
-          // Expected: /tiles/{z}/{x}/{y}.pbf
-          final segments = path.split('/').where((s) => s.isNotEmpty).toList();
-          if (segments.length != 4) {
-            request.response.statusCode = HttpStatus.badRequest;
-            await request.response.close();
+          if (path.startsWith('/glyphs/')) {
+            await _handleProxyCached(request, base: _proxyRemoteGlyphsBase, kind: _ProxyKind.glyphs);
             continue;
           }
 
-          final z = int.tryParse(segments[1]);
-          final x = int.tryParse(segments[2]);
-          final yStr = segments[3];
-          final y = int.tryParse(yStr.endsWith('.pbf') ? yStr.substring(0, yStr.length - 4) : yStr);
-
-          if (z == null || x == null || y == null) {
-            request.response.statusCode = HttpStatus.badRequest;
-            await request.response.close();
+          if (path.startsWith('/sprites')) {
+            await _handleProxyCached(request, base: _proxyRemoteSpriteBase, kind: _ProxyKind.sprites);
             continue;
           }
 
-          final tileId = pm.ZXY(z, x, y).toTileId();
-          final tile = await archive.tile(tileId);
-
-          // MapLibre expects raw MVT protobuf bytes.
-          request.response.statusCode = HttpStatus.ok;
-          request.response.headers.contentType = ContentType('application', 'x-protobuf');
-          request.response.headers.set('Access-Control-Allow-Origin', '*');
-          request.response.add(tile.bytes());
+          request.response.statusCode = HttpStatus.notFound;
           await request.response.close();
+          continue;
         } catch (e) {
           request.response.statusCode = HttpStatus.noContent;
           await request.response.close();
@@ -119,6 +139,8 @@ class OfflineService {
 
     await archive?.close();
     await server?.close(force: true);
+    _proxyRemoteGlyphsBase = null;
+    _proxyRemoteSpriteBase = null;
   }
 
   Future<String> buildStyleFileForPmtiles({
@@ -128,6 +150,17 @@ class OfflineService {
     final styleJsonString = await rootBundle.loadString('assets/styles/horizon_style.json');
     final styleJson = json.decode(styleJsonString) as Map<String, dynamic>;
 
+    // Capture remote endpoints so we can proxy+cache them via localhost.
+    final glyphs = styleJson['glyphs'];
+    if (glyphs is String && glyphs.startsWith('http')) {
+      // Keep only base path up to /{fontstack}/{range}.pbf
+      _proxyRemoteGlyphsBase = Uri.parse(glyphs.replaceAll('{fontstack}/{range}.pbf', ''));
+    }
+    final sprite = styleJson['sprite'];
+    if (sprite is String && sprite.startsWith('http')) {
+      _proxyRemoteSpriteBase = Uri.parse(sprite);
+    }
+
     final sources = (styleJson['sources'] as Map<String, dynamic>?);
     if (sources == null || !sources.containsKey(vectorSourceName)) {
       throw Exception('Vector source "$vectorSourceName" not found in style');
@@ -136,10 +169,68 @@ class OfflineService {
     final source = sources[vectorSourceName] as Map<String, dynamic>;
     source['tiles'] = ['${tilesBaseUri.toString()}/{z}/{x}/{y}.pbf'];
 
+    // Patch glyphs/sprites to localhost (served via proxy+cache).
+    if (_pmtilesServer != null) {
+      final port = _pmtilesServer!.port;
+      if (_proxyRemoteGlyphsBase != null) {
+        styleJson['glyphs'] = 'http://127.0.0.1:$port/glyphs/{fontstack}/{range}.pbf';
+      }
+      if (_proxyRemoteSpriteBase != null) {
+        styleJson['sprite'] = 'http://127.0.0.1:$port/sprites';
+      }
+    }
+
     final directory = await getApplicationDocumentsDirectory();
     final outFile = File('${directory.path}/horizon_style_pmtiles.json');
     await outFile.writeAsString(json.encode(styleJson));
     return outFile.path;
+  }
+
+  Future<void> _handleProxyCached(
+    HttpRequest request, {
+    required Uri? base,
+    required _ProxyKind kind,
+  }) async {
+    if (base == null || _proxyCacheDir == null) {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+      return;
+    }
+
+    final relativePath = request.uri.path;
+    final query = request.uri.hasQuery ? '?${request.uri.query}' : '';
+    final cacheKey = base64Url.encode(utf8.encode('${base.toString()}$relativePath$query'));
+    final cachedFile = File('${_proxyCacheDir!.path}/$cacheKey');
+
+    if (await cachedFile.exists()) {
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers.set('Access-Control-Allow-Origin', '*');
+      request.response.add(await cachedFile.readAsBytes());
+      await request.response.close();
+      return;
+    }
+
+    final remoteUri = switch (kind) {
+      _ProxyKind.glyphs => base.resolve(relativePath.replaceFirst(RegExp('^/glyphs/'), '')),
+      _ProxyKind.sprites => Uri.parse('${base.toString()}${relativePath.replaceFirst(RegExp('^/sprites'), '')}'),
+    };
+    try {
+      final response = await http.get(remoteUri);
+      if (response.statusCode != 200) {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+        return;
+      }
+
+      await cachedFile.writeAsBytes(response.bodyBytes, flush: true);
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers.set('Access-Control-Allow-Origin', '*');
+      request.response.add(response.bodyBytes);
+      await request.response.close();
+    } catch (_) {
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+    }
   }
 
   // Note: Pour une implémentation SOTA, on utiliserait des range requests
@@ -210,3 +301,5 @@ class OfflineService {
     await deleteOfflineRegion(id);
   }
 }
+
+enum _ProxyKind { glyphs, sprites }

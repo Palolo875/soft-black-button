@@ -1,15 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:app/services/weather_service.dart';
 import 'package:app/services/offline_service.dart';
+import 'package:app/services/weather_engine_sota.dart';
+import 'package:app/services/weather_models.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;
   bool _isStyleLoaded = false;
   final WeatherService _weatherService = WeatherService();
+  final WeatherEngineSota _weatherEngine = const WeatherEngineSota();
   final OfflineService _offlineService = OfflineService();
   double _timeOffset = 0.0;
+
+  Timer? _weatherRefreshTimer;
+  LatLng? _lastWeatherPosition;
+
+  WeatherDecision? _weatherDecision;
+  bool _weatherLoading = false;
+  String? _weatherError;
 
   double? _offlineDownloadProgress;
   String? _offlineDownloadError;
@@ -20,11 +32,32 @@ class MapProvider with ChangeNotifier {
 
   MaplibreMapController? get mapController => _mapController;
   bool get isStyleLoaded => _isStyleLoaded;
+  WeatherDecision? get weatherDecision => _weatherDecision;
+  bool get weatherLoading => _weatherLoading;
+  String? get weatherError => _weatherError;
   double? get offlineDownloadProgress => _offlineDownloadProgress;
   String? get offlineDownloadError => _offlineDownloadError;
   bool get pmtilesEnabled => _pmtilesEnabled;
   double? get pmtilesProgress => _pmtilesProgress;
   String? get pmtilesError => _pmtilesError;
+
+  Future<void> refreshWeatherAt(LatLng position) async {
+    _lastWeatherPosition = position;
+    _weatherLoading = true;
+    _weatherError = null;
+    notifyListeners();
+
+    try {
+      final decision = await _weatherEngine.getDecisionForPoint(position);
+      _weatherDecision = decision;
+      _weatherLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _weatherLoading = false;
+      _weatherError = e.toString();
+      notifyListeners();
+    }
+  }
 
   void clearOfflineDownloadState() {
     _offlineDownloadProgress = null;
@@ -55,8 +88,19 @@ class MapProvider with ChangeNotifier {
     _isStyleLoaded = loaded;
     if (loaded && _mapController != null) {
       _weatherService.initWeather(_mapController!);
+      unawaited(refreshWeatherAt(_lastWeatherPosition ?? const LatLng(48.8566, 2.3522)));
+      _startWeatherAutoRefresh();
     }
     notifyListeners();
+  }
+
+  void _startWeatherAutoRefresh() {
+    _weatherRefreshTimer?.cancel();
+    _weatherRefreshTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      final pos = _lastWeatherPosition;
+      if (pos == null) return;
+      unawaited(refreshWeatherAt(pos));
+    });
   }
 
   Future<void> enablePmtilesPack({
@@ -185,6 +229,7 @@ class MapProvider with ChangeNotifier {
   @override
   void dispose() {
     _weatherService.dispose();
+    _weatherRefreshTimer?.cancel();
     unawaited(_offlineService.stopPmtilesServer());
     super.dispose();
   }
@@ -193,5 +238,6 @@ class MapProvider with ChangeNotifier {
     _mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(position, 14.0),
     );
+    unawaited(refreshWeatherAt(position));
   }
 }

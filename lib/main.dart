@@ -15,6 +15,9 @@ class HorizonApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const seed = Color(0xFFABC9D3);
+    const radius = 22.0;
+
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => MapProvider()),
@@ -25,10 +28,34 @@ class HorizonApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         fontFamily: 'Inter',
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFabc9d3),
-          brightness: Brightness.light,
-          surface: Colors.white,
+        colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.light),
+        scaffoldBackgroundColor: const Color(0xFFF6F7F8),
+        cardTheme: CardTheme(
+          color: Colors.white.withOpacity(0.9),
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white.withOpacity(0.92),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radius),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radius),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radius),
+            borderSide: BorderSide(color: seed.withOpacity(0.35), width: 1),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
+          elevation: 1.5,
+          backgroundColor: Colors.white.withOpacity(0.92),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         ),
       ),
       localizationsDelegates: const [
@@ -53,6 +80,23 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  static const _glassRadius = 22.0;
+
+  BoxDecoration _glassDecoration({double opacity = 0.62}) {
+    return BoxDecoration(
+      color: Colors.white.withOpacity(opacity),
+      borderRadius: BorderRadius.circular(_glassRadius),
+      border: Border.all(color: Colors.white.withOpacity(0.32)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.06),
+          blurRadius: 30,
+          offset: const Offset(0, 12),
+        ),
+      ],
+    );
+  }
+
   Future<void> _recenterOnUser(MapProvider mapProvider) async {
     try {
       final position = await Geolocator.getCurrentPosition(
@@ -94,23 +138,12 @@ class _MapScreenState extends State<MapScreen> {
                 child: Material(
                   color: Colors.transparent,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(30),
+                    borderRadius: BorderRadius.circular(_glassRadius),
                     child: BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                          border: Border.all(color: Colors.white.withOpacity(0.3)),
-                        ),
+                        decoration: _glassDecoration(),
                         child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -118,16 +151,32 @@ class _MapScreenState extends State<MapScreen> {
                           width: 8,
                           height: 8,
                           decoration: const BoxDecoration(
-                            color: Colors.greenAccent,
+                            color: Color(0xFF88D3A2),
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Icon(Icons.wb_sunny_rounded, size: 18, color: Color(0xFFFFB74D)),
+                        Icon(
+                          mapProvider.weatherError != null
+                              ? Icons.cloud_off_rounded
+                              : (mapProvider.weatherLoading
+                                  ? Icons.cloud_sync_rounded
+                                  : Icons.wb_sunny_rounded),
+                          size: 18,
+                          color: mapProvider.weatherError != null
+                              ? const Color(0xFFB55A5A)
+                              : (mapProvider.weatherLoading
+                                  ? const Color(0xFF4A90A0)
+                                  : const Color(0xFFFFC56E)),
+                        ),
                         const SizedBox(width: 8),
-                        const Text(
-                          "Paris — 22°C",
-                          style: TextStyle(
+                        Text(
+                          mapProvider.weatherError != null
+                              ? 'Météo indisponible'
+                              : (mapProvider.weatherDecision == null
+                                  ? 'Météo…'
+                                  : '${mapProvider.weatherDecision!.now.temperature.round()}°C  •  confort ${mapProvider.weatherDecision!.comfortScore.toStringAsFixed(1)}/10  •  conf ${(mapProvider.weatherDecision!.confidence * 100).round()}%'),
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             letterSpacing: -0.2,
@@ -162,19 +211,17 @@ class _MapScreenState extends State<MapScreen> {
                         mapProvider.disablePmtilesPack();
                       } else {
                         mapProvider.enablePmtilesPack(
-                          url: 'https://example.com/horizon.pmtiles',
+                          url: 'https://r2-public.protomaps.com/protomaps-sample-datasets/cb_2018_us_zcta510_500k.pmtiles',
                           fileName: 'horizon.pmtiles',
                           regionNameForUi: 'Pack offline',
                         );
                       }
                     },
-                    backgroundColor: Colors.white,
-                    elevation: 2,
                     child: Icon(
                       mapProvider.pmtilesEnabled
                           ? Icons.storage_rounded
                           : Icons.storage_outlined,
-                      color: Colors.black87,
+                      color: mapProvider.pmtilesEnabled ? const Color(0xFF2E2E2E) : Colors.black87,
                     ),
                   ),
                 ),
@@ -187,8 +234,6 @@ class _MapScreenState extends State<MapScreen> {
                     onPressed: () {
                       mapProvider.downloadVisibleRegion(regionName: 'Visible region');
                     },
-                    backgroundColor: Colors.white,
-                    elevation: 2,
                     child: const Icon(Icons.download_for_offline_outlined, color: Colors.black87),
                   ),
                 ),
@@ -200,33 +245,36 @@ class _MapScreenState extends State<MapScreen> {
                     onPressed: () {
                       _recenterOnUser(mapProvider);
                     },
-                    backgroundColor: Colors.white,
-                    elevation: 2,
                     child: const Icon(Icons.my_location, color: Colors.blueAccent),
                   ),
                 ),
 
                 // Timeline Slider SOTA 2026
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(_glassRadius),
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 16),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.3)),
-                      ),
+                      decoration: _glassDecoration(),
                       child: Column(
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("Maintenant", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                          Text("+${mapProvider.timeOffset.toInt()}h", style: const TextStyle(fontSize: 10, color: Colors.blue)),
-                          const Text("+24h", style: TextStyle(fontSize: 10)),
+                          Text(
+                            "Maintenant",
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.black.withOpacity(0.70)),
+                          ),
+                          Text(
+                            "+${mapProvider.timeOffset.toInt()}h",
+                            style: const TextStyle(fontSize: 10, color: Color(0xFF4A90A0), fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            "+24h",
+                            style: TextStyle(fontSize: 10, color: Colors.black.withOpacity(0.55), fontWeight: FontWeight.w600),
+                          ),
                         ],
                       ),
                       SliderTheme(
@@ -234,6 +282,9 @@ class _MapScreenState extends State<MapScreen> {
                           trackHeight: 2,
                           thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                           overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                          activeTrackColor: const Color(0xFF4A90A0),
+                          inactiveTrackColor: const Color(0xFF4A90A0).withOpacity(0.25),
+                          thumbColor: const Color(0xFF4A90A0),
                         ),
                         child: Slider(
                           value: mapProvider.timeOffset,
@@ -251,17 +302,7 @@ class _MapScreenState extends State<MapScreen> {
                 // Barre de recherche minimaliste
                 Container(
                   padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
+                  decoration: _glassDecoration(opacity: 0.85),
                   child: TextField(
                     decoration: InputDecoration(
                       hintText: "Où allez-vous ?",
@@ -289,16 +330,12 @@ class _MapScreenState extends State<MapScreen> {
           : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(_glassRadius),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.75),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.35)),
-                    ),
+                    decoration: _glassDecoration(opacity: 0.78),
                     child: Row(
                       children: [
                         const Icon(Icons.offline_pin_outlined, size: 18),
@@ -332,6 +369,8 @@ class _MapScreenState extends State<MapScreen> {
                                         LinearProgressIndicator(
                                           value: mapProvider.pmtilesProgress ?? mapProvider.offlineDownloadProgress,
                                           minHeight: 3,
+                                          color: const Color(0xFF4A90A0),
+                                          backgroundColor: const Color(0xFF4A90A0).withOpacity(0.18),
                                         ),
                                       ],
                                     ),
