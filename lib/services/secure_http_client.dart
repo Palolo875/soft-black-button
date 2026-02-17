@@ -97,6 +97,25 @@ class SecureHttpClient {
     return f.timeout(cfg.requestTimeout);
   }
 
+  Future<http.Response> postJson(
+    Uri uri, {
+    required String body,
+    Map<String, String>? headers,
+    SecureHttpConfig? config,
+  }) async {
+    final cfg = config ?? this.config;
+    final validated = _validate(uri, cfg);
+    final h = <String, String>{
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      ...?headers,
+    };
+
+    final client = _clientFor(cfg);
+    final f = client.post(validated, headers: h, body: body);
+    return f.timeout(cfg.requestTimeout);
+  }
+
   Future<http.StreamedResponse> send(http.BaseRequest request, {SecureHttpConfig? config}) async {
     final cfg = config ?? this.config;
     final validated = _validate(request.url, cfg);

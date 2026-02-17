@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:app/services/secure_http_client.dart';
+import 'package:http/http.dart' as http;
 
 class ValhallaRouteResult {
   final List<LatLng> shape;
@@ -79,21 +80,35 @@ class ValhallaClient {
       if (costingOptions != null) 'costing_options': costingOptions,
     };
 
-    final jsonParam = json.encode(req);
-    final uri = base.replace(
-      path: (base.path.endsWith('/') ? base.path.substring(0, base.path.length - 1) : base.path) + '/route',
-      queryParameters: {
-        'json': jsonParam,
-      },
-    );
+    final jsonBody = json.encode(req);
+    final routePath = (base.path.endsWith('/') ? base.path.substring(0, base.path.length - 1) : base.path) + '/route';
+    final postUri = base.replace(path: routePath, queryParameters: const {});
 
-    final response = await _http.get(
-      uri,
-      config: SecureHttpConfig(
-        requestTimeout: const Duration(seconds: 30),
-        pinnedServerCertificatesPem: _pinsPem,
-      ),
-    );
+    http.Response response;
+    try {
+      response = await _http.postJson(
+        postUri,
+        body: jsonBody,
+        config: SecureHttpConfig(
+          requestTimeout: const Duration(seconds: 30),
+          pinnedServerCertificatesPem: _pinsPem,
+        ),
+      );
+    } catch (_) {
+      final getUri = base.replace(
+        path: routePath,
+        queryParameters: {
+          'json': jsonBody,
+        },
+      );
+      response = await _http.get(
+        getUri,
+        config: SecureHttpConfig(
+          requestTimeout: const Duration(seconds: 30),
+          pinnedServerCertificatesPem: _pinsPem,
+        ),
+      );
+    }
     if (response.statusCode != 200) {
       throw Exception('Valhalla HTTP ${response.statusCode}');
     }

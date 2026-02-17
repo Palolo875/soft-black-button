@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:app/providers/map_provider.dart';
 
@@ -15,43 +16,16 @@ class HorizonMap extends StatefulWidget {
 }
 
 class _HorizonMapState extends State<HorizonMap> {
-  MaplibreMapController? _controller;
-  bool _isPermissionGranted = false;
-
   @override
   void initState() {
     super.initState();
-    _checkLocationPermission();
-  }
-
-  Future<void> _checkLocationPermission() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      return;
-    }
-
-    setState(() {
-      _isPermissionGranted = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final p = Provider.of<MapProvider>(context, listen: false);
+      unawaited(p.ensureLocationPermission());
     });
   }
 
   void _onMapCreated(MaplibreMapController controller) {
-    _controller = controller;
     _loadImages();
     if (widget.onMapCreated != null) {
       widget.onMapCreated!(controller);
@@ -65,6 +39,7 @@ class _HorizonMapState extends State<HorizonMap> {
 
   @override
   Widget build(BuildContext context) {
+    final granted = context.select<MapProvider, bool>((p) => p.locationPermissionGranted);
     return MaplibreMap(
       styleString: 'assets/styles/horizon_style.json',
       onMapCreated: _onMapCreated,
@@ -72,8 +47,8 @@ class _HorizonMapState extends State<HorizonMap> {
         target: LatLng(48.8566, 2.3522), // Paris par défaut
         zoom: 11.0,
       ),
-      myLocationEnabled: _isPermissionGranted,
-      myLocationTrackingMode: _isPermissionGranted
+      myLocationEnabled: granted,
+      myLocationTrackingMode: granted
           ? MyLocationTrackingMode.tracking
           : MyLocationTrackingMode.none,
       rotateGesturesEnabled: true,

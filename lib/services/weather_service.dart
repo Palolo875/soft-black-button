@@ -25,7 +25,7 @@ class WeatherService {
   final double baseLat = 48.8566;
   final double baseLng = 2.3522;
 
-  void initWeather(MaplibreMapController controller) async {
+  Future<void> initWeather({required MaplibreMapController controller}) async {
     _animationTimer?.cancel();
     _particles.clear();
 

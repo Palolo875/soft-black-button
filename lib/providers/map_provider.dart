@@ -77,6 +77,7 @@ class MapProvider with ChangeNotifier {
   StreamSubscription<Position>? _positionSub;
   LatLng? _lastUserPosition;
   double? _lastUserAccuracyMeters;
+  bool _locationPermissionGranted = false;
 
   WeatherDecision? _weatherDecision;
   bool _weatherLoading = false;
@@ -129,6 +130,7 @@ class MapProvider with ChangeNotifier {
   AnalyticsSettings get analyticsSettings => _analytics.settings;
   LatLng? get lastUserPosition => _lastUserPosition;
   double? get lastUserAccuracyMeters => _lastUserAccuracyMeters;
+  bool get locationPermissionGranted => _locationPermissionGranted;
 
   String confidenceLabel(double confidence) {
     if (confidence >= 0.75) return 'Fiable';
@@ -435,6 +437,31 @@ class MapProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> ensureLocationPermission() async {
+    if (kIsWeb) {
+      _locationPermissionGranted = false;
+      return;
+    }
+
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _locationPermissionGranted = false;
+      notifyListeners();
+      return;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    _locationPermissionGranted =
+        permission != LocationPermission.denied && permission != LocationPermission.deniedForever;
+    notifyListeners();
+    if (_locationPermissionGranted) {
+      _startOrUpdatePositionTracking();
+    }
+  }
+
   Future<void> setNotificationsEnabled(bool enabled) async {
     if (enabled) {
       final ok = await _notifications.requestPermissions();
@@ -643,18 +670,9 @@ class MapProvider with ChangeNotifier {
     if (kIsWeb) return;
     if (_positionSub != null) return;
 
+    if (!_locationPermissionGranted) return;
+
     unawaited(() async {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
-
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        return;
-      }
-
       _positionSub = Geolocator.getPositionStream(locationSettings: _locationSettingsForCurrentMode()).listen(
         (p) {
           _lastUserPosition = LatLng(p.latitude, p.longitude);
@@ -1367,7 +1385,8 @@ class MapProvider with ChangeNotifier {
 
     try {
       final bounds = await controller.getVisibleRegion();
-      _offlineService
+      await _offlineDownloadSub?.cancel();
+      _offlineDownloadSub = _offlineService
           .downloadRegion(
             regionName: regionName,
             bounds: bounds,
@@ -1379,9 +1398,13 @@ class MapProvider with ChangeNotifier {
           _offlineDownloadProgress = event.progress;
         } else if (event is Success) {
           _offlineDownloadProgress = 1.0;
+          unawaited(_offlineDownloadSub?.cancel());
+          _offlineDownloadSub = null;
         } else if (event is Error) {
           _offlineDownloadError = event.cause.message ?? event.cause.code;
           _offlineDownloadProgress = null;
+          unawaited(_offlineDownloadSub?.cancel());
+          _offlineDownloadSub = null;
         }
         notifyListeners();
       });
@@ -1391,6 +1414,8 @@ class MapProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  StreamSubscription<DownloadRegionStatus>? _offlineDownloadSub;
 
   Future<List<OfflineRegion>> listOfflineRegions() {
     return _offlineService.listRegions();
@@ -1405,7 +1430,9 @@ class MapProvider with ChangeNotifier {
     _weatherService.dispose();
     _weatherRefreshTimer?.cancel();
     _routeDebounce?.cancel();
+    unawaited(_positionSub?.cancel());
     unawaited(_connectivitySub?.cancel());
+    unawaited(_offlineDownloadSub?.cancel());
     unawaited(_offlineService.stopPmtilesServer());
     super.dispose();
   }
