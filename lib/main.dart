@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:app/providers/map_provider.dart';
 import 'package:app/widgets/horizon_map.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   runApp(const HorizonApp());
@@ -52,6 +53,17 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
+  Future<void> _recenterOnUser(MapProvider mapProvider) async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+      );
+      mapProvider.centerOnUser(LatLng(position.latitude, position.longitude));
+    } catch (_) {
+      // Permissions / service disabled / timeout.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final mapProvider = Provider.of<MapProvider>(context);
@@ -140,12 +152,53 @@ class _MapScreenState extends State<MapScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                // Bouton Pack PMTiles (offline robuste)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: FloatingActionButton.small(
+                    heroTag: 'pmtiles-pack',
+                    onPressed: () {
+                      if (mapProvider.pmtilesEnabled) {
+                        mapProvider.disablePmtilesPack();
+                      } else {
+                        mapProvider.enablePmtilesPack(
+                          url: 'https://example.com/horizon.pmtiles',
+                          fileName: 'horizon.pmtiles',
+                          regionNameForUi: 'Pack offline',
+                        );
+                      }
+                    },
+                    backgroundColor: Colors.white,
+                    elevation: 2,
+                    child: Icon(
+                      mapProvider.pmtilesEnabled
+                          ? Icons.storage_rounded
+                          : Icons.storage_outlined,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+
+                // Bouton Offline (download région visible)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: FloatingActionButton.small(
+                    heroTag: 'offline-download',
+                    onPressed: () {
+                      mapProvider.downloadVisibleRegion(regionName: 'Visible region');
+                    },
+                    backgroundColor: Colors.white,
+                    elevation: 2,
+                    child: const Icon(Icons.download_for_offline_outlined, color: Colors.black87),
+                  ),
+                ),
+
                 // Bouton Localisation
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: FloatingActionButton.small(
                     onPressed: () {
-                      // Recentrer
+                      _recenterOnUser(mapProvider);
                     },
                     backgroundColor: Colors.white,
                     elevation: 2,
@@ -224,6 +277,82 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ],
       ),
+
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+
+      // Overlay progression offline (minimal)
+      floatingActionButton: (mapProvider.offlineDownloadProgress == null &&
+              mapProvider.offlineDownloadError == null &&
+              mapProvider.pmtilesProgress == null &&
+              mapProvider.pmtilesError == null)
+          ? null
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.75),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.offline_pin_outlined, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: mapProvider.pmtilesError != null
+                              ? Text(
+                                  mapProvider.pmtilesError!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                )
+                              : mapProvider.offlineDownloadError != null
+                                  ? Text(
+                                      mapProvider.offlineDownloadError!,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                    )
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          mapProvider.pmtilesProgress != null
+                                              ? 'Activation pack offline…'
+                                              : 'Téléchargement offline…',
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        LinearProgressIndicator(
+                                          value: mapProvider.pmtilesProgress ?? mapProvider.offlineDownloadProgress,
+                                          minHeight: 3,
+                                        ),
+                                      ],
+                                    ),
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton(
+                          onPressed: () {
+                            // Minimal: juste masquer l'erreur/état.
+                            // (On peut ajouter un vrai cancel quand on branchera l'API native.)
+                            mapProvider.clearOfflineDownloadState();
+                            mapProvider.clearPmtilesState();
+                          },
+                          icon: const Icon(Icons.close, size: 18),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
     );
   }
 }

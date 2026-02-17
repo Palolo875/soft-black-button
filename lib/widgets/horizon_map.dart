@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
@@ -66,10 +66,7 @@ class _HorizonMapState extends State<HorizonMap> {
   @override
   Widget build(BuildContext context) {
     return MaplibreMap(
-      // Sur le web, le chemin des assets est souvent préfixé par assets/
-      styleString: kIsWeb
-        ? "assets/assets/styles/horizon_style.json"
-        : "assets/styles/horizon_style.json",
+      styleString: 'assets/styles/horizon_style.json',
       onMapCreated: _onMapCreated,
       initialCameraPosition: const CameraPosition(
         target: LatLng(48.8566, 2.3522), // Paris par défaut
