@@ -5,6 +5,7 @@ import 'package:app/providers/map_provider.dart';
 import 'package:app/widgets/horizon_map.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
 void main() {
   runApp(const HorizonApp());
