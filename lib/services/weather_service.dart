@@ -20,17 +20,18 @@ class WeatherService {
   Timer? _animationTimer;
   final Random _random = Random();
   final List<WindParticle> _particles = [];
+  double _timeOffset = 0.0;
 
   final double baseLat = 48.8566;
   final double baseLng = 2.3522;
 
   void initWeather(MaplibreMapController controller) async {
     // Créer les particules initiales
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 150; i++) {
       _particles.add(WindParticle(
         lat: baseLat + (_random.nextDouble() - 0.5) * 0.1,
         lng: baseLng + (_random.nextDouble() - 0.5) * 0.1,
-        speed: 0.0002 + _random.nextDouble() * 0.0003,
+        speed: 0.0005 + _random.nextDouble() * 0.0008,
         angle: _random.nextDouble() * 2 * pi,
       ));
     }
@@ -41,11 +42,20 @@ class WeatherService {
       "wind-source",
       "wind-layer",
       const CircleLayerProperties(
-        circleRadius: 2.5,
+        circleRadius: [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          5, 1.0,
+          12, 4.0
+        ],
         circleColor: "#ffffff",
-        circleOpacity: 0.5,
+        circleOpacity: 0.4,
+        circleBlur: 0.8,
       ),
     );
+
+    _addOpportunities(controller);
 
     _animationTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       for (var p in _particles) {
@@ -69,6 +79,46 @@ class WeatherService {
         }
       }).toList()
     };
+  }
+
+  void updateTimeOffset(double offset) {
+    // Simuler un changement de direction du vent avec le temps
+    double delta = offset - _timeOffset;
+    for (var p in _particles) {
+      p.angle += delta * 0.5;
+      p.speed *= (1.0 + delta * 0.1);
+    }
+    _timeOffset = offset;
+  }
+
+  Future<void> _addOpportunities(MaplibreMapController controller) async {
+    final opportunities = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {"title": "Point de vue Serein", "type": "view"},
+          "geometry": {"type": "Point", "coordinates": [2.3522, 48.86]}
+        },
+        {
+          "type": "Feature",
+          "properties": {"title": "Alerte Vent Doux", "type": "weather"},
+          "geometry": {"type": "Point", "coordinates": [2.36, 48.85]}
+        }
+      ]
+    };
+
+    await controller.addSource("opp-source", GeojsonSourceProperties(data: opportunities));
+    await controller.addCircleLayer(
+      "opp-source",
+      "opp-layer",
+      const CircleLayerProperties(
+        circleRadius: 8.0,
+        circleColor: "#abc9d3",
+        circleStrokeWidth: 2.0,
+        circleStrokeColor: "#ffffff",
+      ),
+    );
   }
 
   void dispose() {
