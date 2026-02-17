@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:pmtiles/pmtiles.dart' as pm;
+import 'package:app/services/offline_core.dart';
+import 'package:app/services/offline_registry.dart';
+import 'package:http/http.dart' as http;
 
 class OfflineService {
   HttpServer? _pmtilesServer;
@@ -15,26 +17,50 @@ class OfflineService {
   Uri? _proxyRemoteSpriteBase;
   Directory? _proxyCacheDir;
 
+  final OfflineCore _offlineCore = OfflineCore();
+
+  Future<List<OfflinePack>> listOfflinePacks() async {
+    await _offlineCore.registry.pruneMissingFiles();
+    return _offlineCore.registry.listPacks();
+  }
+
+  Future<void> uninstallPackById(String id) {
+    return _offlineCore.uninstallPackById(id);
+  }
+
   Future<String> downloadPMTiles(String url, String fileName) async {
     if (kIsWeb) {
       return url; // Sur le web, on retourne l'URL directe (le navigateur gère le cache)
     }
-
-    final directory = await getApplicationDocumentsDirectory();
-    final filePath = '${directory.path}/$fileName';
+    final root = await _offlineCore.registry.rootDir();
+    final filePath = '${root.path}/$fileName';
     final file = File(filePath);
-
     if (await file.exists()) {
+      await _offlineCore.registry.touch('pmtiles:$fileName');
       return filePath;
     }
 
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode == 200) {
-      await file.writeAsBytes(response.bodyBytes);
-      return filePath;
-    } else {
-      throw Exception('Failed to download PMTiles');
-    }
+    await _offlineCore.installFilePack(
+      id: 'pmtiles:$fileName',
+      type: OfflinePackType.pmtiles,
+      url: Uri.parse(url),
+      fileName: fileName,
+    );
+    return filePath;
+  }
+
+  Future<void> uninstallPmtilesPack({
+    required String fileName,
+  }) async {
+    if (kIsWeb) return;
+
+    try {
+      if (_pmtilesServer != null) {
+        await stopPmtilesServer();
+      }
+    } catch (_) {}
+
+    await _offlineCore.uninstallPackById('pmtiles:$fileName');
   }
 
   Future<Uri?> startPmtilesServer({
@@ -42,6 +68,9 @@ class OfflineService {
     String tilesPathPrefix = '/tiles',
   }) async {
     if (kIsWeb) return null;
+
+    final fileName = pmtilesFilePath.split(Platform.pathSeparator).last;
+    unawaited(_offlineCore.registry.touch('pmtiles:$fileName'));
 
     if (_pmtilesServer != null) {
       return Uri.parse('http://127.0.0.1:${_pmtilesServer!.port}$tilesPathPrefix');

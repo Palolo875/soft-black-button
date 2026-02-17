@@ -1,14 +1,66 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:app/providers/map_provider.dart';
-import 'package:app/widgets/horizon_map.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:app/providers/map_provider.dart';
+import 'package:app/services/routing_models.dart';
+import 'package:app/widgets/horizon_map.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
   runApp(const HorizonApp());
+}
+
+String _formatBytes(int bytes) {
+  const kb = 1024;
+  const mb = 1024 * kb;
+  const gb = 1024 * mb;
+  if (bytes >= gb) return '${(bytes / gb).toStringAsFixed(2)} GB';
+  if (bytes >= mb) return '${(bytes / mb).toStringAsFixed(1)} MB';
+  if (bytes >= kb) return '${(bytes / kb).toStringAsFixed(0)} KB';
+  return '$bytes B';
+}
+
+class _RouteChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _RouteChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF4A90A0).withOpacity(0.16) : Colors.white.withOpacity(0.0),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? const Color(0xFF4A90A0).withOpacity(0.45) : Colors.black.withOpacity(0.10),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: selected ? const Color(0xFF2E2E2E) : Colors.black54,
+            letterSpacing: -0.2,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class HorizonApp extends StatelessWidget {
@@ -170,6 +222,14 @@ class _MapScreenState extends State<MapScreen> {
                                   ? const Color(0xFF4A90A0)
                                   : const Color(0xFFFFC56E)),
                         ),
+                        if (mapProvider.isOnline == false) ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.wifi_off_rounded,
+                            size: 16,
+                            color: Color(0xFF6B6B6B),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         Text(
                           mapProvider.weatherError != null
@@ -184,9 +244,18 @@ class _MapScreenState extends State<MapScreen> {
                             color: Colors.black87,
                           ),
                         ),
-                          ],
-                        ),
-                      ),
+                        if (mapProvider.isOnline == false) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            'Offline',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.black.withOpacity(0.55),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
@@ -202,6 +271,199 @@ class _MapScreenState extends State<MapScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                // Routing controls
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(_glassRadius),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: _glassDecoration(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              mapProvider.routingLoading
+                                  ? 'Route…'
+                                  : (mapProvider.routingError != null
+                                      ? 'Route indisponible'
+                                      : (mapProvider.routeVariants.isEmpty
+                                          ? 'Long-press: départ puis arrivée'
+                                          : 'Variante')),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            if (mapProvider.routeVariants.isNotEmpty) ...[
+                              const SizedBox(width: 10),
+                              _RouteChip(
+                                label: 'Rapide',
+                                selected: mapProvider.selectedVariant.name == 'fast',
+                                onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.fast),
+                              ),
+                              const SizedBox(width: 6),
+                              _RouteChip(
+                                label: 'Sûre',
+                                selected: mapProvider.selectedVariant.name == 'safe',
+                                onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.safe),
+                              ),
+                              const SizedBox(width: 6),
+                              _RouteChip(
+                                label: 'Calme',
+                                selected: mapProvider.selectedVariant.name == 'scenic',
+                                onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.scenic),
+                              ),
+                              const SizedBox(width: 10),
+                              InkWell(
+                                onTap: () => mapProvider.clearRoute(),
+                                child: const Icon(Icons.close_rounded, size: 18, color: Colors.black54),
+                              ),
+                              const SizedBox(width: 10),
+                              InkWell(
+                                onTap: () async {
+                                  final selected = mapProvider.currentRouteExplanation;
+                                  if (selected == null) return;
+                                  final all = mapProvider.routeExplanations;
+                                  await showModalBottomSheet<void>(
+                                    context: context,
+                                    showDragHandle: true,
+                                    builder: (ctx) {
+                                      final entries = all.entries.toList();
+                                      entries.sort((a, b) => a.key.index.compareTo(b.key.index));
+
+                                      return SafeArea(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text('Pourquoi cette route ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                              const SizedBox(height: 10),
+                                              Text(selected.headline, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                              if (selected.caveat != null) ...[
+                                                const SizedBox(height: 6),
+                                                Text(selected.caveat!, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                              ],
+                                              const SizedBox(height: 12),
+                                              if (selected.factors.isEmpty)
+                                                const Text('Aucun facteur dominant détecté.', style: TextStyle(color: Colors.black54))
+                                              else
+                                                ...selected.factors.map((f) {
+                                                  return Padding(
+                                                    padding: const EdgeInsets.only(bottom: 8),
+                                                    child: Row(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Container(
+                                                          width: 8,
+                                                          height: 8,
+                                                          margin: const EdgeInsets.only(top: 6),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFF4A90A0).withOpacity(0.75),
+                                                            shape: BoxShape.circle,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 10),
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              Text(f.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                                              const SizedBox(height: 2),
+                                                              Text(f.detail, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                }),
+                                              const SizedBox(height: 12),
+                                              const Text('Comparaison rapide', style: TextStyle(fontWeight: FontWeight.w800)),
+                                              const SizedBox(height: 8),
+                                              ...entries.map((e) {
+                                                final ex = e.value;
+                                                final label = e.key == RouteVariantKind.fast
+                                                    ? 'Rapide'
+                                                    : (e.key == RouteVariantKind.safe ? 'Sûre' : 'Calme');
+                                                final selectedMark = e.key == mapProvider.selectedVariant ? ' • sélectionnée' : '';
+                                                return Padding(
+                                                  padding: const EdgeInsets.only(bottom: 6),
+                                                  child: Text(
+                                                    '$label$selectedMark — vent ${ex.metrics.avgWind.toStringAsFixed(1)} m/s, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
+                                                    style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                  ),
+                                                );
+                                              }),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                                child: Text(
+                                  'Pourquoi ?'.toUpperCase(),
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF4A90A0)),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                if (mapProvider.routingError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(_glassRadius),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: _glassDecoration(),
+                            child: Text(
+                              mapProvider.routingError!,
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF7A2D2D)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (mapProvider.routeExplanation != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(_glassRadius),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: _glassDecoration(opacity: 0.54),
+                            child: Text(
+                              mapProvider.routeExplanation!,
+                              style: const TextStyle(fontSize: 12, color: Colors.black87),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
                 // Bouton Pack PMTiles (offline robuste)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
@@ -218,6 +480,32 @@ class _MapScreenState extends State<MapScreen> {
                         );
                       }
                     },
+                    onLongPress: mapProvider.pmtilesEnabled
+                        ? () async {
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) {
+                                return AlertDialog(
+                                  title: const Text('Supprimer le pack offline ?'),
+                                  content: const Text('Le pack PMTiles sera supprimé de l’appareil.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(ctx).pop(false),
+                                      child: const Text('Annuler'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(ctx).pop(true),
+                                      child: const Text('Supprimer'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                            if (ok == true) {
+                              await mapProvider.uninstallCurrentPmtilesPack();
+                            }
+                          }
+                        : null,
                     child: Icon(
                       mapProvider.pmtilesEnabled
                           ? Icons.storage_rounded
@@ -234,6 +522,101 @@ class _MapScreenState extends State<MapScreen> {
                     heroTag: 'offline-download',
                     onPressed: () {
                       mapProvider.downloadVisibleRegion(regionName: 'Visible region');
+                    },
+                    onLongPress: () async {
+                      final packs = await mapProvider.listOfflinePacks();
+                      if (!context.mounted) return;
+
+                      await showModalBottomSheet<void>(
+                        context: context,
+                        showDragHandle: true,
+                        builder: (ctx) {
+                          return SafeArea(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Packs offline',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (packs.isEmpty)
+                                    const Text(
+                                      'Aucun pack installé.',
+                                      style: TextStyle(color: Colors.black54),
+                                    )
+                                  else
+                                    Flexible(
+                                      child: ListView.separated(
+                                        shrinkWrap: true,
+                                        itemCount: packs.length,
+                                        separatorBuilder: (_, __) => const Divider(height: 16),
+                                        itemBuilder: (c, i) {
+                                          final p = packs[i];
+                                          return Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      p.id,
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: const TextStyle(fontWeight: FontWeight.w700),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      '${p.type.name} • ${_formatBytes(p.sizeBytes)}',
+                                                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              IconButton(
+                                                onPressed: () async {
+                                                  final ok = await showDialog<bool>(
+                                                    context: ctx,
+                                                    builder: (dctx) {
+                                                      return AlertDialog(
+                                                        title: const Text('Supprimer ce pack ?'),
+                                                        content: Text(p.id),
+                                                        actions: [
+                                                          TextButton(
+                                                            onPressed: () => Navigator.of(dctx).pop(false),
+                                                            child: const Text('Annuler'),
+                                                          ),
+                                                          TextButton(
+                                                            onPressed: () => Navigator.of(dctx).pop(true),
+                                                            child: const Text('Supprimer'),
+                                                          ),
+                                                        ],
+                                                      );
+                                                    },
+                                                  );
+                                                  if (ok == true) {
+                                                    await mapProvider.uninstallOfflinePackById(p.id);
+                                                    if (ctx.mounted) Navigator.of(ctx).pop();
+                                                  }
+                                                },
+                                                icon: const Icon(Icons.delete_outline_rounded),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
                     },
                     child: const Icon(Icons.download_for_offline_outlined, color: Colors.black87),
                   ),

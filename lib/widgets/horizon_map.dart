@@ -84,6 +84,9 @@ class _HorizonMapState extends State<HorizonMap> {
         debugPrint("Style loaded successfully");
         Provider.of<MapProvider>(context, listen: false).setStyleLoaded(true);
       },
+      onMapLongClick: (point, latLng) {
+        Provider.of<MapProvider>(context, listen: false).setRoutePoint(latLng);
+      },
     );
   }
 }

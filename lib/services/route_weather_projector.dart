@@ -15,13 +15,19 @@ class RouteWeatherProjector {
     required DateTime departureTime,
     required double speedMetersPerSecond,
     double sampleEveryMeters = 1000,
+    int maxSamples = 60,
   }) async {
     if (polyline.length < 2) return const [];
     if (speedMetersPerSecond <= 0) {
       throw Exception('speedMetersPerSecond must be > 0');
     }
 
-    final samples = _resamplePolyline(polyline, sampleEveryMeters);
+    final totalLen = _polylineLengthMeters(polyline);
+    final effectiveEvery = maxSamples <= 2
+        ? sampleEveryMeters
+        : max(sampleEveryMeters, totalLen / (maxSamples - 1));
+
+    final samples = _resamplePolyline(polyline, effectiveEvery);
 
     double total = 0.0;
     final out = <RouteWeatherSample>[];
@@ -44,6 +50,14 @@ class RouteWeatherProjector {
     }
 
     return out;
+  }
+
+  double _polylineLengthMeters(List<LatLng> input) {
+    double len = 0.0;
+    for (int i = 1; i < input.length; i++) {
+      len += _haversineMeters(input[i - 1], input[i]);
+    }
+    return len;
   }
 
   List<LatLng> _resamplePolyline(List<LatLng> input, double everyMeters) {
