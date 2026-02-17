@@ -1,10 +1,12 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:app/providers/map_provider.dart';
 import 'package:app/services/routing_models.dart';
+import 'package:app/services/analytics_service.dart';
 import 'package:app/widgets/horizon_map.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -132,8 +134,31 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   static const _glassRadius = 22.0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final p = Provider.of<MapProvider>(context, listen: false);
+      unawaited(p.initTrustAndPerf());
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final p = Provider.of<MapProvider>(context, listen: false);
+    final fg = state == AppLifecycleState.resumed;
+    p.setAppInForeground(fg);
+  }
 
   BoxDecoration _glassDecoration({double opacity = 0.62}) {
     return BoxDecoration(
@@ -210,6 +235,25 @@ class _MapScreenState extends State<MapScreen> {
                                     children: [
                                       const Text('Confiance & confidentialité', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                                       const SizedBox(height: 12),
+                                      Row(
+                                        children: [
+                                          const Expanded(child: Text('Mode économie batterie', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                          Switch(
+                                            value: mapProvider.lowPowerMode,
+                                            onChanged: (v) => mapProvider.setLowPowerMode(v),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        children: [
+                                          const Expanded(child: Text('Analytics anonymes (opt-in)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                          Switch(
+                                            value: mapProvider.analyticsSettings.level == AnalyticsLevel.anonymous,
+                                            onChanged: (v) => mapProvider.setAnalyticsLevel(v ? AnalyticsLevel.anonymous : AnalyticsLevel.off),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
                                       Text('Stockage sécurisé : ${_formatBytes(report.secureStoreBytes)}', style: const TextStyle(fontSize: 12)),
                                       Text('Cache itinéraires (legacy) : ${_formatBytes(report.routeCacheBytes)}', style: const TextStyle(fontSize: 12)),
                                       Text('Cache météo (legacy) : ${_formatBytes(report.weatherCacheBytes)}', style: const TextStyle(fontSize: 12)),
@@ -222,6 +266,70 @@ class _MapScreenState extends State<MapScreen> {
                                         style: TextStyle(fontSize: 12, color: Colors.black54),
                                       ),
                                       const SizedBox(height: 14),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              onPressed: () async {
+                                                final json = await mapProvider.exportPerfMetricsJson();
+                                                if (!ctx.mounted) return;
+                                                await showDialog<void>(
+                                                  context: ctx,
+                                                  builder: (dctx) {
+                                                    return AlertDialog(
+                                                      title: const Text('Rapport perf (local)'),
+                                                      content: SizedBox(
+                                                        width: double.maxFinite,
+                                                        child: SingleChildScrollView(
+                                                          child: SelectableText(json, style: const TextStyle(fontSize: 11)),
+                                                        ),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () => Navigator.of(dctx).pop(),
+                                                          child: const Text('Fermer'),
+                                                        ),
+                                                      ],
+                                                    );
+                                                  },
+                                                );
+                                              },
+                                              child: const Text('Perf'),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              onPressed: () async {
+                                                final json = await mapProvider.exportAnalyticsBufferJson();
+                                                if (!ctx.mounted) return;
+                                                await showDialog<void>(
+                                                  context: ctx,
+                                                  builder: (dctx) {
+                                                    return AlertDialog(
+                                                      title: const Text('Buffer analytics (local)'),
+                                                      content: SizedBox(
+                                                        width: double.maxFinite,
+                                                        child: SingleChildScrollView(
+                                                          child: SelectableText(json ?? 'Aucun événement.', style: const TextStyle(fontSize: 11)),
+                                                        ),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () => Navigator.of(dctx).pop(),
+                                                          child: const Text('Fermer'),
+                                                        ),
+                                                      ],
+                                                    );
+                                                  },
+                                                );
+                                              },
+                                              child: const Text('Analytics'),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
                                       Row(
                                         children: [
                                           Expanded(

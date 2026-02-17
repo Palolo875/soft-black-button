@@ -20,12 +20,28 @@ class ValhallaRouteResult {
 class ValhallaClient {
   final Uri base;
   final SecureHttpClient _http;
+  final List<String> _pinsPem;
 
   ValhallaClient({
     Uri? base,
     SecureHttpClient? httpClient,
   })  : base = base ?? _defaultBase(),
-        _http = httpClient ?? SecureHttpClient();
+        _http = httpClient ?? SecureHttpClient(),
+        _pinsPem = _loadPinsPem();
+
+  static List<String> _loadPinsPem() {
+    const raw = String.fromEnvironment('VALHALLA_TLS_PINS_B64', defaultValue: '');
+    if (raw.trim().isEmpty) return const [];
+    final parts = raw.split(';').map((e) => e.trim()).where((e) => e.isNotEmpty);
+    final out = <String>[];
+    for (final p in parts) {
+      try {
+        final bytes = base64.decode(p);
+        out.add(utf8.decode(bytes));
+      } catch (_) {}
+    }
+    return out;
+  }
 
   static Uri _defaultBase() {
     const raw = String.fromEnvironment(
@@ -71,7 +87,13 @@ class ValhallaClient {
       },
     );
 
-    final response = await _http.get(uri, config: const SecureHttpConfig(requestTimeout: Duration(seconds: 30)));
+    final response = await _http.get(
+      uri,
+      config: SecureHttpConfig(
+        requestTimeout: const Duration(seconds: 30),
+        pinnedServerCertificatesPem: _pinsPem,
+      ),
+    );
     if (response.statusCode != 200) {
       throw Exception('Valhalla HTTP ${response.statusCode}');
     }

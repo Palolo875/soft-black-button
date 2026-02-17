@@ -14,6 +14,10 @@ import 'package:app/services/offline_registry.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:app/services/explainability_engine.dart';
 import 'package:app/services/privacy_service.dart';
+import 'package:app/services/analytics_service.dart';
+import 'package:app/services/horizon_scheduler.dart';
+import 'package:app/services/perf_metrics.dart';
+import 'package:geolocator/geolocator.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;
@@ -24,6 +28,9 @@ class MapProvider with ChangeNotifier {
   final RouteCache _routeCache = RouteCache(encrypted: true);
   final OfflineService _offlineService = OfflineService();
   final PrivacyService _privacyService = const PrivacyService();
+  final AnalyticsService _analytics = AnalyticsService();
+  final HorizonScheduler _scheduler = HorizonScheduler();
+  final PerfMetrics _metrics = PerfMetrics();
   final ExplainabilityEngine _explainability = const ExplainabilityEngine();
   double _timeOffset = 0.0;
 
@@ -45,6 +52,13 @@ class MapProvider with ChangeNotifier {
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool? _isOnline;
+
+  bool _lowPowerMode = false;
+  bool _appInForeground = true;
+
+  StreamSubscription<Position>? _positionSub;
+  LatLng? _lastUserPosition;
+  double? _lastUserAccuracyMeters;
 
   WeatherDecision? _weatherDecision;
   bool _weatherLoading = false;
@@ -80,24 +94,80 @@ class MapProvider with ChangeNotifier {
   String? get pmtilesError => _pmtilesError;
   String get pmtilesFileName => _pmtilesFileName;
   bool? get isOnline => _isOnline;
+  bool get lowPowerMode => _lowPowerMode;
+  AnalyticsSettings get analyticsSettings => _analytics.settings;
+  LatLng? get lastUserPosition => _lastUserPosition;
+  double? get lastUserAccuracyMeters => _lastUserAccuracyMeters;
 
-  Future<void> refreshWeatherAt(LatLng position) async {
+  Future<void> refreshWeatherAt(LatLng position, {bool userInitiated = true}) async {
     _lastWeatherPosition = position;
     _weatherLoading = true;
     _weatherError = null;
     notifyListeners();
 
+    final snap = SchedulerSnapshot(
+      appInForeground: _appInForeground,
+      isOnline: _isOnline ?? true,
+      lowPowerMode: _lowPowerMode,
+      navigationActive: _routeVariants.isNotEmpty,
+      speedMps: null,
+    );
+    if (!_scheduler.shouldComputeWeather(snap, userInitiated: userInitiated)) {
+      _weatherLoading = false;
+      notifyListeners();
+      return;
+    }
+
     try {
+      final sw = Stopwatch()..start();
       final decision = await _weatherEngine.getDecisionForPoint(position);
+      sw.stop();
       _weatherDecision = decision;
       _weatherLoading = false;
       notifyListeners();
+
+      _metrics.recordDuration('weather_decision_ms', sw.elapsedMilliseconds);
+      _metrics.inc('weather_refresh');
+      unawaited(_metrics.flush());
+      unawaited(_analytics.record('weather_refreshed', props: {'trigger': userInitiated ? 'user' : 'auto'}));
     } catch (e) {
       _weatherLoading = false;
       _weatherError = e.toString();
       notifyListeners();
+
+      _metrics.inc('weather_error');
+      unawaited(_metrics.flush());
     }
 
+  }
+
+  Future<String> exportPerfMetricsJson() {
+    return _metrics.exportJson();
+  }
+
+  Future<String?> exportAnalyticsBufferJson() {
+    return _analytics.exportBufferJson();
+  }
+
+  Future<void> initTrustAndPerf() async {
+    await _analytics.load();
+    await _metrics.load();
+    notifyListeners();
+  }
+
+  Future<void> setAnalyticsLevel(AnalyticsLevel level) async {
+    await _analytics.setLevel(level);
+    notifyListeners();
+  }
+
+  void setLowPowerMode(bool enabled) {
+    _lowPowerMode = enabled;
+    notifyListeners();
+    unawaited(_restartPositionTracking());
+  }
+
+  void setAppInForeground(bool fg) {
+    _appInForeground = fg;
   }
 
   Map<RouteVariantKind, RouteExplanation> _buildRouteExplanations(List<RouteVariant> variants) {
@@ -164,6 +234,7 @@ class MapProvider with ChangeNotifier {
     _mapController = controller;
     notifyListeners();
     _startConnectivityMonitor();
+    _startOrUpdatePositionTracking();
   }
 
   double get timeOffset => _timeOffset;
@@ -182,6 +253,64 @@ class MapProvider with ChangeNotifier {
       _startWeatherAutoRefresh();
       _startConnectivityMonitor();
     }
+  }
+
+  LocationSettings _locationSettingsForCurrentMode() {
+    final navigationActive = _routeVariants.isNotEmpty;
+    if (_lowPowerMode) {
+      return const LocationSettings(
+        accuracy: LocationAccuracy.low,
+        distanceFilter: 120,
+      );
+    }
+    if (navigationActive) {
+      return const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 12,
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.medium,
+      distanceFilter: 40,
+    );
+  }
+
+  void _startOrUpdatePositionTracking() {
+    if (kIsWeb) return;
+    if (_positionSub != null) return;
+
+    unawaited(() async {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      _positionSub = Geolocator.getPositionStream(locationSettings: _locationSettingsForCurrentMode()).listen(
+        (p) {
+          _lastUserPosition = LatLng(p.latitude, p.longitude);
+          _lastUserAccuracyMeters = p.accuracy;
+
+          // In background we only keep last fix; no heavy work.
+          if (!_appInForeground) return;
+
+          // Optional light refresh: do not spam.
+          // Weather refresh is user-initiated elsewhere; scheduler gating is handled there.
+        },
+        onError: (_) {},
+      );
+    }());
+  }
+
+  Future<void> _restartPositionTracking() async {
+    await _positionSub?.cancel();
+    _positionSub = null;
+    _startOrUpdatePositionTracking();
   }
 
   void _startConnectivityMonitor() {
@@ -223,8 +352,19 @@ class MapProvider with ChangeNotifier {
     unawaited(_renderRouteMarkers());
     _routeDebounce?.cancel();
     _routeDebounce = Timer(const Duration(milliseconds: 450), () {
-      unawaited(computeRouteVariants());
+      final snap = SchedulerSnapshot(
+        appInForeground: _appInForeground,
+        isOnline: _isOnline ?? true,
+        lowPowerMode: _lowPowerMode,
+        navigationActive: true,
+        speedMps: null,
+      );
+      if (_scheduler.shouldComputeRouting(snap, userInitiated: true)) {
+        unawaited(computeRouteVariants());
+      }
     });
+
+    unawaited(_restartPositionTracking());
   }
 
   Future<void> computeRouteVariants() async {
@@ -246,18 +386,25 @@ class MapProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      final sw = Stopwatch()..start();
       final variants = await _routingEngine.computeVariants(
         start: start,
         end: end,
         departureTime: DateTime.now().toUtc(),
         speedMetersPerSecond: 4.2,
       );
+      sw.stop();
       _routeVariants = variants;
       _selectedVariant = _selectedVariant;
       _routeExplanations = _buildRouteExplanations(variants);
       _routeExplanation = currentRouteExplanation?.headline ?? _buildExplanationFor(_currentVariant());
       _routingLoading = false;
       notifyListeners();
+
+      _metrics.recordDuration('routing_compute_ms', sw.elapsedMilliseconds);
+      _metrics.inc('routing_compute');
+      unawaited(_metrics.flush());
+      unawaited(_analytics.record('route_computed', props: {'variants': variants.length}));
 
       unawaited(_saveRouteCache(start, end, variants));
 
@@ -277,6 +424,9 @@ class MapProvider with ChangeNotifier {
       _routingLoading = false;
       _routingError = e.toString();
       notifyListeners();
+
+      _metrics.inc('routing_error');
+      unawaited(_metrics.flush());
     }
   }
 
@@ -365,6 +515,7 @@ class MapProvider with ChangeNotifier {
     _routeDebounce?.cancel();
     notifyListeners();
     await _clearRouteLayers();
+    await _restartPositionTracking();
   }
 
   void clearSelectedRouteWeatherSample() {
@@ -686,10 +837,11 @@ class MapProvider with ChangeNotifier {
 
   void _startWeatherAutoRefresh() {
     _weatherRefreshTimer?.cancel();
-    _weatherRefreshTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+    _weatherRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       final pos = _lastWeatherPosition;
       if (pos == null) return;
-      unawaited(refreshWeatherAt(pos));
+      if (!_appInForeground) return;
+      unawaited(refreshWeatherAt(pos, userInitiated: false));
     });
   }
 
@@ -830,6 +982,6 @@ class MapProvider with ChangeNotifier {
     _mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(position, 14.0),
     );
-    unawaited(refreshWeatherAt(position));
+    unawaited(refreshWeatherAt(position, userInitiated: true));
   }
 }
