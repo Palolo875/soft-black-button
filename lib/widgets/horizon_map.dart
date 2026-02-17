@@ -16,9 +16,12 @@ class HorizonMap extends StatefulWidget {
 }
 
 class _HorizonMapState extends State<HorizonMap> {
+  late final Future<String> _styleFuture;
+
   @override
   void initState() {
     super.initState();
+    _styleFuture = rootBundle.loadString('assets/styles/horizon_style.json');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = Provider.of<MapProvider>(context, listen: false);
       unawaited(p.ensureLocationPermission());
@@ -40,30 +43,37 @@ class _HorizonMapState extends State<HorizonMap> {
   @override
   Widget build(BuildContext context) {
     final granted = context.select<MapProvider, bool>((p) => p.locationPermissionGranted);
-    return MaplibreMap(
-      styleString: 'assets/styles/horizon_style.json',
-      onMapCreated: _onMapCreated,
-      initialCameraPosition: const CameraPosition(
-        target: LatLng(48.8566, 2.3522), // Paris par défaut
-        zoom: 11.0,
-      ),
-      myLocationEnabled: granted,
-      myLocationTrackingMode: granted
-          ? MyLocationTrackingMode.tracking
-          : MyLocationTrackingMode.none,
-      rotateGesturesEnabled: true,
-      tiltGesturesEnabled: true,
-      compassEnabled: true,
-      trackCameraPosition: true,
-      onStyleLoadedCallback: () {
-        debugPrint("Style loaded successfully");
-        Provider.of<MapProvider>(context, listen: false).setStyleLoaded(true);
-      },
-      onMapLongClick: (point, latLng) {
-        Provider.of<MapProvider>(context, listen: false).setRoutePoint(latLng);
-      },
-      onMapClick: (point, latLng) {
-        Provider.of<MapProvider>(context, listen: false).onMapTap(latLng);
+    return FutureBuilder<String>(
+      future: _styleFuture,
+      builder: (context, snap) {
+        final style = snap.data;
+        if (style == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return MaplibreMap(
+          styleString: style,
+          onMapCreated: _onMapCreated,
+          initialCameraPosition: const CameraPosition(
+            target: LatLng(48.8566, 2.3522), // Paris par défaut
+            zoom: 11.0,
+          ),
+          myLocationEnabled: granted,
+          myLocationTrackingMode: granted ? MyLocationTrackingMode.tracking : MyLocationTrackingMode.none,
+          rotateGesturesEnabled: true,
+          tiltGesturesEnabled: true,
+          compassEnabled: true,
+          trackCameraPosition: true,
+          onStyleLoadedCallback: () {
+            debugPrint("Style loaded successfully");
+            Provider.of<MapProvider>(context, listen: false).setStyleLoaded(true);
+          },
+          onMapLongClick: (point, latLng) {
+            Provider.of<MapProvider>(context, listen: false).setRoutePoint(latLng);
+          },
+          onMapClick: (point, latLng) {
+            Provider.of<MapProvider>(context, listen: false).onMapTap(latLng);
+          },
+        );
       },
     );
   }
