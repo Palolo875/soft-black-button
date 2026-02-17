@@ -1,5 +1,7 @@
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import 'package:app/services/comfort_model.dart';
+
 class WeatherSnapshot {
   final DateTime timestamp;
   final double temperature;
@@ -24,6 +26,12 @@ class WeatherSnapshot {
   });
 }
 
+enum RelativeWindKind {
+  head,
+  tail,
+  cross,
+}
+
 class WeatherPoint {
   final LatLng location;
   final List<WeatherSnapshot> timeline;
@@ -35,11 +43,13 @@ class WeatherDecision {
   final WeatherSnapshot now;
   final double comfortScore;
   final double confidence;
+  final ComfortBreakdown? comfortBreakdown;
 
   const WeatherDecision({
     required this.now,
     required this.comfortScore,
     required this.confidence,
+    this.comfortBreakdown,
   });
 }
 
@@ -49,6 +59,12 @@ class RouteWeatherSample {
   final WeatherSnapshot snapshot;
   final double comfortScore;
   final double confidence;
+  final ComfortBreakdown? comfortBreakdown;
+  final double headingDegrees;
+  final RelativeWindKind relativeWindKind;
+  final double headwindness;
+  final double crosswindness;
+  final double relativeWindImpact;
 
   const RouteWeatherSample({
     required this.location,
@@ -56,5 +72,11 @@ class RouteWeatherSample {
     required this.snapshot,
     required this.comfortScore,
     required this.confidence,
+    this.comfortBreakdown,
+    this.headingDegrees = 0.0,
+    this.relativeWindKind = RelativeWindKind.cross,
+    this.headwindness = 0.0,
+    this.crosswindness = 0.0,
+    this.relativeWindImpact = 0.0,
   });
 }

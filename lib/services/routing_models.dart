@@ -1,7 +1,7 @@
 import 'package:app/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-enum RouteVariantKind { fast, safe, scenic }
+enum RouteVariantKind { fast, safe, scenic, imported }
 
 class RouteVariant {
   final RouteVariantKind kind;

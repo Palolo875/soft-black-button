@@ -18,6 +18,12 @@ import 'package:app/services/analytics_service.dart';
 import 'package:app/services/horizon_scheduler.dart';
 import 'package:app/services/perf_metrics.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:app/services/route_compare_service.dart';
+import 'package:app/services/gpx_import_service.dart';
+import 'package:app/services/route_geometry.dart';
+import 'package:app/services/route_weather_projector.dart';
+import 'package:app/services/notification_service.dart';
+import 'package:app/services/notification_settings_store.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;
@@ -31,6 +37,11 @@ class MapProvider with ChangeNotifier {
   final AnalyticsService _analytics = AnalyticsService();
   final HorizonScheduler _scheduler = HorizonScheduler();
   final PerfMetrics _metrics = PerfMetrics();
+  final RouteCompareService _routeCompare = RouteCompareService();
+  final GpxImportService _gpxImport = GpxImportService();
+  final RouteWeatherProjector _routeWeatherProjector = RouteWeatherProjector();
+  final NotificationService _notifications = NotificationService();
+  final NotificationSettingsStore _notificationStore = NotificationSettingsStore();
   final ExplainabilityEngine _explainability = const ExplainabilityEngine();
   double _timeOffset = 0.0;
 
@@ -49,6 +60,13 @@ class MapProvider with ChangeNotifier {
   String? _routeExplanation;
   Map<RouteVariantKind, RouteExplanation> _routeExplanations = const {};
   RouteWeatherSample? _selectedRouteWeatherSample;
+
+  bool _gpxImportLoading = false;
+  String? _gpxImportError;
+  String? _gpxRouteName;
+
+  NotificationSettings _notificationSettings = const NotificationSettings(enabled: false);
+  DateTime? _lastNotificationAt;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool? _isOnline;
@@ -72,6 +90,11 @@ class MapProvider with ChangeNotifier {
   String? _pmtilesError;
   String _pmtilesFileName = 'horizon.pmtiles';
 
+  bool _expertWeatherMode = false;
+  bool _expertWindLayer = true;
+  bool _expertRainLayer = true;
+  bool _expertCloudLayer = false;
+
   MaplibreMapController? get mapController => _mapController;
   bool get isStyleLoaded => _isStyleLoaded;
   WeatherDecision? get weatherDecision => _weatherDecision;
@@ -87,6 +110,10 @@ class MapProvider with ChangeNotifier {
   Map<RouteVariantKind, RouteExplanation> get routeExplanations => _routeExplanations;
   RouteExplanation? get currentRouteExplanation => _routeExplanations[_selectedVariant];
   RouteWeatherSample? get selectedRouteWeatherSample => _selectedRouteWeatherSample;
+  bool get gpxImportLoading => _gpxImportLoading;
+  String? get gpxImportError => _gpxImportError;
+  String? get gpxRouteName => _gpxRouteName;
+  bool get notificationsEnabled => _notificationSettings.enabled;
   double? get offlineDownloadProgress => _offlineDownloadProgress;
   String? get offlineDownloadError => _offlineDownloadError;
   bool get pmtilesEnabled => _pmtilesEnabled;
@@ -95,9 +122,207 @@ class MapProvider with ChangeNotifier {
   String get pmtilesFileName => _pmtilesFileName;
   bool? get isOnline => _isOnline;
   bool get lowPowerMode => _lowPowerMode;
+  bool get expertWeatherMode => _expertWeatherMode;
+  bool get expertWindLayer => _expertWindLayer;
+  bool get expertRainLayer => _expertRainLayer;
+  bool get expertCloudLayer => _expertCloudLayer;
   AnalyticsSettings get analyticsSettings => _analytics.settings;
   LatLng? get lastUserPosition => _lastUserPosition;
   double? get lastUserAccuracyMeters => _lastUserAccuracyMeters;
+
+  String confidenceLabel(double confidence) {
+    if (confidence >= 0.75) return 'Fiable';
+    if (confidence >= 0.50) return 'Variable';
+    return 'Incertain';
+  }
+
+  Future<void> _ensureExpertWeatherLayers() async {
+    final controller = _mapController;
+    if (controller == null) return;
+
+    try {
+      await controller.addSource('expert-weather', GeojsonSourceProperties(data: _emptyFeatureCollection()));
+    } catch (_) {}
+
+    try {
+      await controller.addCircleLayer(
+        'expert-weather',
+        'expert-wind-layer',
+        const CircleLayerProperties(
+          circleRadius: [
+            'interpolate',
+            ['linear'],
+            ['get', 'windKmh'],
+            0,
+            2.0,
+            25,
+            5.0,
+            55,
+            9.0,
+          ],
+          circleColor: [
+            'interpolate',
+            ['linear'],
+            ['get', 'windKmh'],
+            0,
+            '#ABC9D3',
+            25,
+            '#4A90A0',
+            55,
+            '#2E2E2E',
+          ],
+          circleOpacity: 0.55,
+          circleBlur: 0.2,
+        ),
+      );
+    } catch (_) {}
+
+    try {
+      await controller.addCircleLayer(
+        'expert-weather',
+        'expert-rain-layer',
+        const CircleLayerProperties(
+          circleRadius: [
+            'interpolate',
+            ['linear'],
+            ['get', 'rainMmH'],
+            0,
+            1.0,
+            1,
+            4.0,
+            5,
+            9.0,
+          ],
+          circleColor: [
+            'interpolate',
+            ['linear'],
+            ['get', 'rainMmH'],
+            0,
+            '#ffffff',
+            1,
+            '#5AA6B5',
+            5,
+            '#2B4C9A',
+          ],
+          circleOpacity: 0.42,
+          circleBlur: 0.35,
+        ),
+      );
+    } catch (_) {}
+
+    try {
+      await controller.addCircleLayer(
+        'expert-weather',
+        'expert-cloud-layer',
+        const CircleLayerProperties(
+          circleRadius: [
+            'interpolate',
+            ['linear'],
+            ['get', 'cloudPct'],
+            0,
+            2.0,
+            60,
+            6.0,
+            100,
+            10.0,
+          ],
+          circleColor: [
+            'interpolate',
+            ['linear'],
+            ['get', 'cloudPct'],
+            0,
+            '#ffffff',
+            60,
+            '#BFC7CA',
+            100,
+            '#7A7A7A',
+          ],
+          circleOpacity: 0.28,
+          circleBlur: 0.55,
+        ),
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _renderExpertWeatherLayers() async {
+    final controller = _mapController;
+    if (controller == null) return;
+    if (!_isStyleLoaded) return;
+
+    if (!_expertWeatherMode) {
+      try {
+        await controller.setGeoJsonSource('expert-weather', _emptyFeatureCollection());
+      } catch (_) {}
+      return;
+    }
+
+    final variant = _currentVariant();
+    final points = <Map<String, dynamic>>[];
+
+    if (variant != null && variant.weatherSamples.isNotEmpty) {
+      for (final s in variant.weatherSamples) {
+        points.add({
+          'type': 'Feature',
+          'properties': {
+            'windKmh': s.snapshot.windSpeed * 3.6,
+            'rainMmH': s.snapshot.precipitation,
+            'cloudPct': s.snapshot.cloudCover,
+            'showWind': _expertWindLayer ? 1 : 0,
+            'showRain': _expertRainLayer ? 1 : 0,
+            'showCloud': _expertCloudLayer ? 1 : 0,
+          },
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [s.location.longitude, s.location.latitude],
+          },
+        });
+      }
+    } else if (_lastWeatherPosition != null && _weatherDecision != null) {
+      final p = _lastWeatherPosition!;
+      final s = _weatherDecision!.now;
+      points.add({
+        'type': 'Feature',
+        'properties': {
+          'windKmh': s.windSpeed * 3.6,
+          'rainMmH': s.precipitation,
+          'cloudPct': s.cloudCover,
+          'showWind': _expertWindLayer ? 1 : 0,
+          'showRain': _expertRainLayer ? 1 : 0,
+          'showCloud': _expertCloudLayer ? 1 : 0,
+        },
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [p.longitude, p.latitude],
+        },
+      });
+    }
+
+    // Hide via opacity when toggled off (avoid layer API differences).
+    try {
+      await controller.setGeoJsonSource('expert-weather', {
+        'type': 'FeatureCollection',
+        'features': points,
+      });
+    } catch (_) {}
+
+    try {
+      await controller.setPaintProperty('expert-wind-layer', 'circle-opacity', _expertWindLayer ? 0.55 : 0.0);
+      await controller.setPaintProperty('expert-rain-layer', 'circle-opacity', _expertRainLayer ? 0.42 : 0.0);
+      await controller.setPaintProperty('expert-cloud-layer', 'circle-opacity', _expertCloudLayer ? 0.28 : 0.0);
+    } catch (_) {}
+  }
+
+  String? get currentWeatherReliabilityLabel {
+    final c = _weatherDecision?.confidence;
+    if (c == null) return null;
+    return confidenceLabel(c);
+  }
+
+  String? get selectedSampleReliabilityLabel {
+    final c = _selectedRouteWeatherSample?.confidence;
+    if (c == null) return null;
+    return confidenceLabel(c);
+  }
 
   Future<void> refreshWeatherAt(LatLng position, {bool userInitiated = true}) async {
     _lastWeatherPosition = position;
@@ -120,7 +345,10 @@ class MapProvider with ChangeNotifier {
 
     try {
       final sw = Stopwatch()..start();
-      final decision = await _weatherEngine.getDecisionForPoint(position);
+      final decision = await _weatherEngine.getDecisionForPointAtTime(
+        position,
+        at: _forecastBaseUtc(),
+      );
       sw.stop();
       _weatherDecision = decision;
       _weatherLoading = false;
@@ -141,6 +369,56 @@ class MapProvider with ChangeNotifier {
 
   }
 
+  Future<List<RouteDepartureComparison>> compareDeparturesForSelectedVariant() async {
+    final v = _currentVariant();
+    if (v == null) return const [];
+
+    final cache = _departureCompareCache;
+    final now = DateTime.now();
+    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < const Duration(seconds: 25)) {
+      return cache.items;
+    }
+
+    return _routeCompare.compareDepartures(
+      variant: v,
+      baseDepartureUtc: _forecastBaseUtc(),
+      speedMetersPerSecond: 4.2,
+      offsets: const [
+        Duration.zero,
+        Duration(minutes: 30),
+        Duration(minutes: 60),
+      ],
+      sampleEveryMeters: _lowPowerMode ? 900 : 450,
+      maxSamples: _lowPowerMode ? 60 : 120,
+    ).then((items) {
+      _departureCompareCache = _DepartureCompareCacheEntry(kind: v.kind, at: DateTime.now(), items: items);
+      return items;
+    });
+  }
+
+  Future<DepartureWindowRecommendation?> recommendDepartureWindowForSelectedVariant() async {
+    final v = _currentVariant();
+    if (v == null) return null;
+
+    final cache = _departureWindowCache;
+    final now = DateTime.now();
+    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < const Duration(seconds: 45)) {
+      return cache.item;
+    }
+
+    final rec = await _routeCompare.recommendDepartureWindow(
+      variant: v,
+      baseDepartureUtc: _forecastBaseUtc(),
+      speedMetersPerSecond: 4.2,
+      horizon: const Duration(hours: 6),
+      step: const Duration(minutes: 20),
+      sampleEveryMeters: _lowPowerMode ? 900 : 450,
+      maxSamples: _lowPowerMode ? 60 : 120,
+    );
+    _departureWindowCache = _DepartureWindowCacheEntry(kind: v.kind, at: DateTime.now(), item: rec);
+    return rec;
+  }
+
   Future<String> exportPerfMetricsJson() {
     return _metrics.exportJson();
   }
@@ -152,7 +430,60 @@ class MapProvider with ChangeNotifier {
   Future<void> initTrustAndPerf() async {
     await _analytics.load();
     await _metrics.load();
+    _notificationSettings = await _notificationStore.load();
+    unawaited(_notifications.init());
     notifyListeners();
+  }
+
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    if (enabled) {
+      final ok = await _notifications.requestPermissions();
+      if (!ok) {
+        _notificationSettings = const NotificationSettings(enabled: false);
+        await _notificationStore.save(_notificationSettings);
+        notifyListeners();
+        return;
+      }
+    }
+    _notificationSettings = NotificationSettings(enabled: enabled);
+    await _notificationStore.save(_notificationSettings);
+    notifyListeners();
+    if (enabled) {
+      unawaited(_evaluateAndNotifyContextual());
+    }
+  }
+
+  Future<void> _evaluateAndNotifyContextual() async {
+    if (!_notificationSettings.enabled) return;
+    if (kIsWeb) return;
+
+    // Respect Module 7: no heavy work in background.
+    if (!_appInForeground) return;
+
+    final v = _currentVariant();
+    if (v == null || v.weatherSamples.isEmpty) return;
+
+    final now = DateTime.now();
+    final last = _lastNotificationAt;
+    if (last != null && now.difference(last) < const Duration(minutes: 30)) return;
+
+    // Find first reasonably confident rain risk in the next 45 minutes.
+    final horizon = now.toUtc().add(const Duration(minutes: 45));
+    for (final s in v.weatherSamples) {
+      if (s.eta.isAfter(horizon)) break;
+      if (s.confidence < 0.5) continue;
+      if (s.snapshot.precipitation < 2.0) continue;
+
+      final etaLocal = s.eta.toLocal();
+      final hh = etaLocal.hour.toString().padLeft(2, '0');
+      final mm = etaLocal.minute.toString().padLeft(2, '0');
+      await _notifications.show(
+        title: 'Alerte météo sur ton trajet',
+        body: 'Pluie probable vers $hh:$mm (estimé).',
+      );
+      _lastNotificationAt = DateTime.now();
+      break;
+    }
   }
 
   Future<void> setAnalyticsLevel(AnalyticsLevel level) async {
@@ -193,6 +524,9 @@ class MapProvider with ChangeNotifier {
   Future<LocalDataReport> computeLocalDataReport() {
     return _privacyService.computeReport();
   }
+
+  _DepartureCompareCacheEntry? _departureCompareCache;
+  _DepartureWindowCacheEntry? _departureWindowCache;
 
   Future<void> panicWipeAllLocalData() async {
     await clearRoute();
@@ -239,6 +573,11 @@ class MapProvider with ChangeNotifier {
 
   double get timeOffset => _timeOffset;
 
+  DateTime _forecastBaseUtc() {
+    final minutes = (_timeOffset * 60).round();
+    return DateTime.now().toUtc().add(Duration(minutes: minutes));
+  }
+
   void setTimeOffset(double value) {
     _timeOffset = value;
     _weatherService.updateTimeOffset(value);
@@ -252,7 +591,32 @@ class MapProvider with ChangeNotifier {
       _weatherService.initWeather(controller: _mapController!);
       _startWeatherAutoRefresh();
       _startConnectivityMonitor();
+      unawaited(_ensureExpertWeatherLayers());
     }
+  }
+
+  void setExpertWeatherMode(bool enabled) {
+    _expertWeatherMode = enabled;
+    notifyListeners();
+    unawaited(_renderExpertWeatherLayers());
+  }
+
+  void setExpertWindLayer(bool enabled) {
+    _expertWindLayer = enabled;
+    notifyListeners();
+    unawaited(_renderExpertWeatherLayers());
+  }
+
+  void setExpertRainLayer(bool enabled) {
+    _expertRainLayer = enabled;
+    notifyListeners();
+    unawaited(_renderExpertWeatherLayers());
+  }
+
+  void setExpertCloudLayer(bool enabled) {
+    _expertCloudLayer = enabled;
+    notifyListeners();
+    unawaited(_renderExpertWeatherLayers());
   }
 
   LocationSettings _locationSettingsForCurrentMode() {
@@ -390,12 +754,16 @@ class MapProvider with ChangeNotifier {
       final variants = await _routingEngine.computeVariants(
         start: start,
         end: end,
-        departureTime: DateTime.now().toUtc(),
+        departureTime: _forecastBaseUtc(),
         speedMetersPerSecond: 4.2,
+        sampleEveryMeters: _lowPowerMode ? 900 : 450,
+        maxSamples: _lowPowerMode ? 60 : 120,
       );
       sw.stop();
       _routeVariants = variants;
-      _selectedVariant = _selectedVariant;
+      if (!_routeVariants.any((v) => v.kind == _selectedVariant)) {
+        _selectedVariant = _routeVariants.first.kind;
+      }
       _routeExplanations = _buildRouteExplanations(variants);
       _routeExplanation = currentRouteExplanation?.headline ?? _buildExplanationFor(_currentVariant());
       _routingLoading = false;
@@ -409,6 +777,7 @@ class MapProvider with ChangeNotifier {
       unawaited(_saveRouteCache(start, end, variants));
 
       await _renderSelectedRoute();
+      unawaited(_evaluateAndNotifyContextual());
     } catch (e) {
       final cached = await _loadRouteCache(start, end);
       if (cached != null) {
@@ -501,6 +870,7 @@ class MapProvider with ChangeNotifier {
     // _routeExplanations already computed for all variants after routing.
     notifyListeners();
     unawaited(_renderSelectedRoute());
+    unawaited(_evaluateAndNotifyContextual());
   }
 
   Future<void> clearRoute() async {
@@ -513,9 +883,64 @@ class MapProvider with ChangeNotifier {
     _routeExplanations = const {};
     _selectedRouteWeatherSample = null;
     _routeDebounce?.cancel();
+    _gpxRouteName = null;
     notifyListeners();
     await _clearRouteLayers();
     await _restartPositionTracking();
+  }
+
+  Future<void> importGpxRoute() async {
+    if (_gpxImportLoading) return;
+    _gpxImportLoading = true;
+    _gpxImportError = null;
+    notifyListeners();
+
+    try {
+      final res = await _gpxImport.pickAndParse();
+      if (res == null) {
+        _gpxImportLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      final shape = res.points;
+      final lenMeters = polylineLengthMeters(shape);
+
+      final weatherSamples = await _routeWeatherProjector.projectAlongPolyline(
+        polyline: shape,
+        departureTime: _forecastBaseUtc(),
+        speedMetersPerSecond: 4.2,
+        sampleEveryMeters: _lowPowerMode ? 900 : 450,
+        maxSamples: _lowPowerMode ? 60 : 120,
+      );
+
+      _routeStart = shape.first;
+      _routeEnd = shape.last;
+      _routeVariants = [
+        RouteVariant(
+          kind: RouteVariantKind.imported,
+          shape: shape,
+          lengthKm: lenMeters / 1000.0,
+          timeSeconds: (lenMeters / 4.2),
+          weatherSamples: weatherSamples,
+        ),
+      ];
+      _selectedVariant = RouteVariantKind.imported;
+      _routeExplanations = _buildRouteExplanations(_routeVariants);
+      _routeExplanation = currentRouteExplanation?.headline;
+      _gpxRouteName = res.fileName;
+
+      _gpxImportLoading = false;
+      notifyListeners();
+
+      unawaited(_renderRouteMarkers());
+      await _renderSelectedRoute();
+      unawaited(_evaluateAndNotifyContextual());
+    } catch (e) {
+      _gpxImportLoading = false;
+      _gpxImportError = e.toString();
+      notifyListeners();
+    }
   }
 
   void clearSelectedRouteWeatherSample() {
@@ -630,15 +1055,15 @@ class MapProvider with ChangeNotifier {
           lineJoin: 'round',
           lineCap: 'round',
           lineColor: [
-            'interpolate',
-            ['linear'],
-            ['get', 'comfort'],
-            1,
-            '#B55A5A',
-            5,
-            '#FFC56E',
-            10,
+            'match',
+            ['get', 'windKind'],
+            'tail',
             '#88D3A2',
+            'cross',
+            '#FFC56E',
+            'head',
+            '#B55A5A',
+            '#4A90A0',
           ],
           lineOpacity: [
             'interpolate',
@@ -647,7 +1072,7 @@ class MapProvider with ChangeNotifier {
             0.25,
             0.25,
             0.95,
-            0.85,
+            0.92,
           ],
         ),
       );
@@ -785,6 +1210,8 @@ class MapProvider with ChangeNotifier {
         'properties': {
           'comfort': (a.comfortScore + b.comfortScore) / 2.0,
           'confidence': (a.confidence + b.confidence) / 2.0,
+          'windKind': a.relativeWindKind.name,
+          'windImpact': (a.relativeWindImpact + b.relativeWindImpact) / 2.0,
         },
         'geometry': {
           'type': 'LineString',
@@ -806,6 +1233,8 @@ class MapProvider with ChangeNotifier {
               'properties': {
                 'comfort': s.comfortScore,
                 'confidence': s.confidence,
+                'windKind': s.relativeWindKind.name,
+                'windImpact': s.relativeWindImpact,
               },
               'geometry': {
                 'type': 'Point',
@@ -817,6 +1246,8 @@ class MapProvider with ChangeNotifier {
       'type': 'FeatureCollection',
       'features': points,
     });
+
+    await _renderExpertWeatherLayers();
   }
 
   Future<void> _clearRouteLayers() async {
@@ -827,6 +1258,7 @@ class MapProvider with ChangeNotifier {
       await controller.setGeoJsonSource('route-markers', _emptyFeatureCollection());
       await controller.setGeoJsonSource('route-weather-segments', _emptyFeatureCollection());
       await controller.setGeoJsonSource('route-weather', _emptyFeatureCollection());
+      await controller.setGeoJsonSource('expert-weather', _emptyFeatureCollection());
     } catch (_) {}
   }
 
@@ -984,4 +1416,28 @@ class MapProvider with ChangeNotifier {
     );
     unawaited(refreshWeatherAt(position, userInitiated: true));
   }
+}
+
+class _DepartureCompareCacheEntry {
+  final RouteVariantKind kind;
+  final DateTime at;
+  final List<RouteDepartureComparison> items;
+
+  const _DepartureCompareCacheEntry({
+    required this.kind,
+    required this.at,
+    required this.items,
+  });
+}
+
+class _DepartureWindowCacheEntry {
+  final RouteVariantKind kind;
+  final DateTime at;
+  final DepartureWindowRecommendation item;
+
+  const _DepartureWindowCacheEntry({
+    required this.kind,
+    required this.at,
+    required this.item,
+  });
 }

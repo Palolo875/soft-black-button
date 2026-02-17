@@ -2,6 +2,9 @@ import 'dart:math';
 
 import 'package:app/services/metno_adapter.dart';
 import 'package:app/services/open_meteo_adapter.dart';
+import 'package:app/services/comfort_model.dart';
+import 'package:app/services/comfort_profile.dart';
+import 'package:app/services/comfort_profile_store.dart';
 import 'package:app/services/weather_cache.dart';
 import 'package:app/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -11,11 +14,16 @@ class WeatherEngineSota {
   final MetNoAdapter _metNo;
   final WeatherCache _cache;
   final String _metNoUserAgent;
+  final ComfortProfileStore _profileStore;
+  final ComfortModel _comfortModel;
+  Future<ComfortProfile>? _profileFuture;
 
   WeatherEngineSota({
     OpenMeteoAdapter? openMeteo,
     MetNoAdapter? metNo,
     WeatherCache? cache,
+    ComfortProfileStore? profileStore,
+    ComfortModel comfortModel = const ComfortModel(),
     String metNoUserAgent = const String.fromEnvironment(
       'METNO_USER_AGENT',
       defaultValue: 'HORIZON/1.0 (+https://example.com/contact)',
@@ -23,7 +31,13 @@ class WeatherEngineSota {
   })  : _openMeteo = openMeteo ?? OpenMeteoAdapter(),
         _metNo = metNo ?? MetNoAdapter(),
         _cache = cache ?? WeatherCache(encrypted: true),
+        _profileStore = profileStore ?? ComfortProfileStore(),
+        _comfortModel = comfortModel,
         _metNoUserAgent = metNoUserAgent;
+
+  Future<ComfortProfile> _profile() {
+    return _profileFuture ??= _profileStore.load();
+  }
 
   static String cacheKeyFor(LatLng p) {
     double round(double v) => (v * 50).roundToDouble() / 50;
@@ -32,6 +46,18 @@ class WeatherEngineSota {
 
   Future<WeatherDecision> getDecisionForPoint(
     LatLng point, {
+    double? userHeadingDegrees,
+  }) async {
+    return getDecisionForPointAtTime(
+      point,
+      at: DateTime.now().toUtc(),
+      userHeadingDegrees: userHeadingDegrees,
+    );
+  }
+
+  Future<WeatherDecision> getDecisionForPointAtTime(
+    LatLng point, {
+    required DateTime at,
     double? userHeadingDegrees,
   }) async {
     final key = cacheKeyFor(point);
@@ -46,11 +72,22 @@ class WeatherEngineSota {
     }
 
     final weatherPoint = _normalize(point, payload);
-    final now = _pickNow(weatherPoint);
-    final comfort = _comfortBike(now, userHeadingDegrees: userHeadingDegrees);
+    final snap = _pickNearest(weatherPoint, at.toUtc());
+    final profile = await _profile();
+    final breakdown = _comfortModel.compute(
+      s: snap,
+      userHeadingDegrees: userHeadingDegrees,
+      profile: profile,
+      atUtc: at.toUtc(),
+    );
     final confidence = _confidenceHeuristic(weatherPoint);
 
-    return WeatherDecision(now: now, comfortScore: comfort, confidence: confidence);
+    return WeatherDecision(
+      now: snap,
+      comfortScore: breakdown.score,
+      confidence: confidence,
+      comfortBreakdown: breakdown,
+    );
   }
 
   Future<Map<String, dynamic>> _fetchWithFallback(LatLng p) async {
@@ -180,15 +217,14 @@ class WeatherEngineSota {
     return WeatherPoint(location: point, timeline: timeline);
   }
 
-  WeatherSnapshot _pickNow(WeatherPoint point) {
+  WeatherSnapshot _pickNearest(WeatherPoint point, DateTime atUtc) {
     if (point.timeline.isEmpty) {
       throw Exception('Weather: empty timeline');
     }
-    final now = DateTime.now().toUtc();
     WeatherSnapshot best = point.timeline.first;
-    var bestDelta = (best.timestamp.difference(now)).abs();
+    var bestDelta = (best.timestamp.difference(atUtc)).abs();
     for (final s in point.timeline) {
-      final d = (s.timestamp.difference(now)).abs();
+      final d = (s.timestamp.difference(atUtc)).abs();
       if (d < bestDelta) {
         best = s;
         bestDelta = d;
@@ -199,7 +235,7 @@ class WeatherEngineSota {
 
   double _confidenceHeuristic(WeatherPoint p) {
     if (p.timeline.length < 3) return 0.6;
-    final now = _pickNow(p);
+    final now = _pickNearest(p, DateTime.now().toUtc());
     final idx = p.timeline.indexOf(now);
     if (idx < 0) return 0.6;
 

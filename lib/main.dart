@@ -7,6 +7,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:app/providers/map_provider.dart';
 import 'package:app/services/routing_models.dart';
 import 'package:app/services/analytics_service.dart';
+import 'package:app/services/route_compare_service.dart';
 import 'package:app/widgets/horizon_map.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -23,6 +24,8 @@ String _formatBytes(int bytes) {
   if (bytes >= kb) return '${(bytes / kb).toStringAsFixed(0)} KB';
   return '$bytes B';
 }
+
+double _msToKmh(double ms) => ms * 3.6;
 
 class _RouteChip extends StatelessWidget {
   final String label;
@@ -253,6 +256,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                           ),
                                         ],
                                       ),
+                                      Row(
+                                        children: [
+                                          const Expanded(child: Text('Notifications (opt-in)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                          Switch(
+                                            value: mapProvider.notificationsEnabled,
+                                            onChanged: (v) => mapProvider.setNotificationsEnabled(v),
+                                          ),
+                                        ],
+                                      ),
                                       const SizedBox(height: 8),
                                       Text('Stockage sécurisé : ${_formatBytes(report.secureStoreBytes)}', style: const TextStyle(fontSize: 12)),
                                       Text('Cache itinéraires (legacy) : ${_formatBytes(report.routeCacheBytes)}', style: const TextStyle(fontSize: 12)),
@@ -431,6 +443,72 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                       ),
                                     ),
                                   ],
+                                  const SizedBox(width: 6),
+                                  InkWell(
+                                    onTap: () async {
+                                      await showModalBottomSheet<void>(
+                                        context: context,
+                                        showDragHandle: true,
+                                        builder: (ctx) {
+                                          return SafeArea(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(16),
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text('Couches météo (expert)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                                  const SizedBox(height: 12),
+                                                  Row(
+                                                    children: [
+                                                      const Expanded(child: Text('Mode expert', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                      Switch(
+                                                        value: mapProvider.expertWeatherMode,
+                                                        onChanged: (v) => mapProvider.setExpertWeatherMode(v),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Row(
+                                                    children: [
+                                                      const Expanded(child: Text('Vent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                      Switch(
+                                                        value: mapProvider.expertWindLayer,
+                                                        onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertWindLayer(v) : null,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Row(
+                                                    children: [
+                                                      const Expanded(child: Text('Pluie', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                      Switch(
+                                                        value: mapProvider.expertRainLayer,
+                                                        onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertRainLayer(v) : null,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Row(
+                                                    children: [
+                                                      const Expanded(child: Text('Nuages', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                      Switch(
+                                                        value: mapProvider.expertCloudLayer,
+                                                        onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertCloudLayer(v) : null,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  const Text(
+                                                    'Ces couches restent locales et sont contextualisées par l’itinéraire quand il existe.',
+                                                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                    child: const Icon(Icons.layers_outlined, size: 18, color: Colors.black54),
+                                  ),
                                 ],
                               ),
                             ),
@@ -457,6 +535,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                         final rain = s.snapshot.precipitation;
                                         final wind = s.snapshot.windSpeed;
                                         final confPct = (s.confidence * 100).round();
+                                        final relLabel = mapProvider.selectedSampleReliabilityLabel;
                                         final hh = s.eta.toLocal().hour.toString().padLeft(2, '0');
                                         final mm = s.eta.toLocal().minute.toString().padLeft(2, '0');
                                         return Column(
@@ -465,9 +544,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                             Text('Point météo • ETA $hh:$mm', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
                                             const SizedBox(height: 4),
                                             Text(
-                                              'T ${t.toStringAsFixed(0)}°C • pluie ${rain.toStringAsFixed(1)} mm • vent ${wind.toStringAsFixed(1)} m/s • conf $confPct%',
+                                              'T ${t.toStringAsFixed(0)}°C • pluie ${rain.toStringAsFixed(1)} mm • vent ${_msToKmh(wind).toStringAsFixed(0)} km/h • conf $confPct%${relLabel == null ? '' : ' ($relLabel)'}',
                                               style: const TextStyle(fontSize: 12, color: Colors.black87),
                                             ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Vent relatif : ${s.relativeWindKind.name} • impact ${s.relativeWindImpact.toStringAsFixed(0)}',
+                                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                            ),
+                                            if (s.comfortBreakdown != null && s.comfortBreakdown!.contributions.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                'Impact : ${s.comfortBreakdown!.contributions.take(2).map((c) => '${c.label} ${c.delta.toStringAsFixed(1)}').join(' • ')}',
+                                                style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                              ),
+                                            ],
                                           ],
                                         );
                                       },
@@ -519,7 +610,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                       ? 'Route indisponible'
                                       : (mapProvider.routeVariants.isEmpty
                                           ? 'Long-press: départ puis arrivée'
-                                          : 'Variante')),
+                                          : (mapProvider.selectedVariant == RouteVariantKind.imported && mapProvider.gpxRouteName != null
+                                              ? 'GPX: ${mapProvider.gpxRouteName}'
+                                              : 'Variante')),
                               style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -528,23 +621,38 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             ),
                             if (mapProvider.routeVariants.isNotEmpty) ...[
                               const SizedBox(width: 10),
-                              _RouteChip(
-                                label: 'Rapide',
-                                selected: mapProvider.selectedVariant.name == 'fast',
-                                onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.fast),
-                              ),
-                              const SizedBox(width: 6),
-                              _RouteChip(
-                                label: 'Sûre',
-                                selected: mapProvider.selectedVariant.name == 'safe',
-                                onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.safe),
-                              ),
-                              const SizedBox(width: 6),
-                              _RouteChip(
-                                label: 'Calme',
-                                selected: mapProvider.selectedVariant.name == 'scenic',
-                                onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.scenic),
-                              ),
+                              if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.fast)) ...[
+                                _RouteChip(
+                                  label: 'Rapide',
+                                  selected: mapProvider.selectedVariant == RouteVariantKind.fast,
+                                  onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.fast),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.safe)) ...[
+                                _RouteChip(
+                                  label: 'Sûre',
+                                  selected: mapProvider.selectedVariant == RouteVariantKind.safe,
+                                  onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.safe),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.scenic)) ...[
+                                _RouteChip(
+                                  label: 'Calme',
+                                  selected: mapProvider.selectedVariant == RouteVariantKind.scenic,
+                                  onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.scenic),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.imported)) ...[
+                                _RouteChip(
+                                  label: 'GPX',
+                                  selected: mapProvider.selectedVariant == RouteVariantKind.imported,
+                                  onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.imported),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
                               const SizedBox(width: 10),
                               InkWell(
                                 onTap: () => mapProvider.clearRoute(),
@@ -576,6 +684,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                               if (selected.caveat != null) ...[
                                                 const SizedBox(height: 6),
                                                 Text(selected.caveat!, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                              ],
+                                              if (selected.metrics.avgConfidence > 0) ...[
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  'Fiabilité : ${mapProvider.confidenceLabel(selected.metrics.avgConfidence)} (confiance ${(selected.metrics.avgConfidence * 100).round()}%)',
+                                                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                ),
                                               ],
                                               const SizedBox(height: 12),
                                               if (selected.factors.isEmpty)
@@ -618,16 +733,98 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                                 final ex = e.value;
                                                 final label = e.key == RouteVariantKind.fast
                                                     ? 'Rapide'
-                                                    : (e.key == RouteVariantKind.safe ? 'Sûre' : 'Calme');
+                                                    : (e.key == RouteVariantKind.safe
+                                                        ? 'Sûre'
+                                                        : (e.key == RouteVariantKind.scenic ? 'Calme' : 'GPX'));
                                                 final selectedMark = e.key == mapProvider.selectedVariant ? ' • sélectionnée' : '';
                                                 return Padding(
                                                   padding: const EdgeInsets.only(bottom: 6),
                                                   child: Text(
-                                                    '$label$selectedMark — vent ${ex.metrics.avgWind.toStringAsFixed(1)} m/s, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
+                                                    '$label$selectedMark — vent ${_msToKmh(ex.metrics.avgWind).toStringAsFixed(0)} km/h, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
                                                     style: const TextStyle(fontSize: 12, color: Colors.black87),
                                                   ),
                                                 );
                                               }),
+                                              const SizedBox(height: 14),
+                                              const Text('Comparer départs', style: TextStyle(fontWeight: FontWeight.w800)),
+                                              const SizedBox(height: 8),
+                                              FutureBuilder(
+                                                future: mapProvider.compareDeparturesForSelectedVariant(),
+                                                builder: (context, snap) {
+                                                  final data = snap.data;
+                                                  if (snap.connectionState != ConnectionState.done) {
+                                                    return const Padding(
+                                                      padding: EdgeInsets.symmetric(vertical: 10),
+                                                      child: LinearProgressIndicator(minHeight: 3),
+                                                    );
+                                                  }
+                                                  if (data == null || data.isEmpty) {
+                                                    return const Text('Indisponible.', style: TextStyle(fontSize: 12, color: Colors.black54));
+                                                  }
+
+                                                  RouteDepartureComparison best = data.first;
+                                                  double bestScore = -999;
+                                                  for (final c in data) {
+                                                    final score = c.avgComfort - (c.rainKm * 0.35);
+                                                    if (score > bestScore) {
+                                                      bestScore = score;
+                                                      best = c;
+                                                    }
+                                                  }
+
+                                                  String labelFor(Duration d) {
+                                                    if (d == Duration.zero) return 'T0';
+                                                    final m = d.inMinutes;
+                                                    return 'T+$m';
+                                                  }
+
+                                                  String windLabel(String k) {
+                                                    if (k == 'head') return 'face';
+                                                    if (k == 'tail') return 'dos';
+                                                    return 'latéral';
+                                                  }
+
+                                                  return Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      ...data.map((c) {
+                                                        final conf = (c.avgConfidence * 100).round();
+                                                        return Padding(
+                                                          padding: const EdgeInsets.only(bottom: 6),
+                                                          child: Text(
+                                                            '${labelFor(c.offset)} — confort ${c.avgComfort.toStringAsFixed(1)}/10 (min ${c.minComfort.toStringAsFixed(1)}), pluie ~${c.rainKm.toStringAsFixed(1)} km, vent ${windLabel(c.dominantWind.name)}, conf $conf%',
+                                                            style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                          ),
+                                                        );
+                                                      }),
+                                                      const SizedBox(height: 6),
+                                                      Text(
+                                                        'Recommandation : ${labelFor(best.offset)} (estimé)',
+                                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                              const SizedBox(height: 10),
+                                              FutureBuilder(
+                                                future: mapProvider.recommendDepartureWindowForSelectedVariant(),
+                                                builder: (context, snap) {
+                                                  final rec = snap.data;
+                                                  if (snap.connectionState != ConnectionState.done) {
+                                                    return const SizedBox.shrink();
+                                                  }
+                                                  if (rec == null) return const SizedBox.shrink();
+
+                                                  final when = DateTime.now().add(rec.bestOffset);
+                                                  final hh = when.hour.toString().padLeft(2, '0');
+                                                  final mm = when.minute.toString().padLeft(2, '0');
+                                                  return Text(
+                                                    'Fenêtre optimale : $hh:$mm (${rec.rationale})',
+                                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                                                  );
+                                                },
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -663,6 +860,34 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             child: Text(
                               mapProvider.routingError!,
                               style: const TextStyle(fontSize: 12, color: Color(0xFF7A2D2D)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (mapProvider.gpxImportLoading || mapProvider.gpxImportError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(_glassRadius),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: _glassDecoration(),
+                            child: Text(
+                              mapProvider.gpxImportLoading
+                                  ? 'Import GPX…'
+                                  : (mapProvider.gpxImportError ?? 'Import GPX'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: mapProvider.gpxImportError == null ? Colors.black87 : const Color(0xFF7A2D2D),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
@@ -858,6 +1083,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       _recenterOnUser(mapProvider);
                     },
                     child: const Icon(Icons.my_location, color: Colors.blueAccent),
+                  ),
+                ),
+
+                // Import GPX (privacy-first)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: FloatingActionButton.small(
+                    heroTag: 'gpx-import',
+                    onPressed: () {
+                      mapProvider.importGpxRoute();
+                    },
+                    child: const Icon(Icons.upload_file_rounded, color: Colors.black87),
                   ),
                 ),
 

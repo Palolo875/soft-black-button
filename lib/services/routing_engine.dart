@@ -18,6 +18,8 @@ class RoutingEngine {
     required LatLng end,
     required DateTime departureTime,
     required double speedMetersPerSecond,
+    double sampleEveryMeters = 450,
+    int maxSamples = 120,
   }) async {
     final baseLocations = [start, end];
 
@@ -68,24 +70,24 @@ class RoutingEngine {
       polyline: fast.shape,
       departureTime: departureTime,
       speedMetersPerSecond: speedMetersPerSecond,
-      sampleEveryMeters: 900,
-      maxSamples: 60,
+      sampleEveryMeters: sampleEveryMeters,
+      maxSamples: maxSamples,
     );
 
     final safeSamples = await _projector.projectAlongPolyline(
       polyline: safe.shape,
       departureTime: departureTime,
       speedMetersPerSecond: speedMetersPerSecond,
-      sampleEveryMeters: 900,
-      maxSamples: 60,
+      sampleEveryMeters: sampleEveryMeters,
+      maxSamples: maxSamples,
     );
 
     final scenicSamples = await _projector.projectAlongPolyline(
       polyline: scenic.shape,
       departureTime: departureTime,
       speedMetersPerSecond: speedMetersPerSecond,
-      sampleEveryMeters: 900,
-      maxSamples: 60,
+      sampleEveryMeters: sampleEveryMeters,
+      maxSamples: maxSamples,
     );
 
     return [
