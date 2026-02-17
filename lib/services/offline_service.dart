@@ -44,7 +44,7 @@ class OfflineService {
       return Uri.parse('http://127.0.0.1:${_pmtilesServer!.port}$tilesPathPrefix');
     }
 
-    final archive = pm.PmTilesArchive(pm.FileAt(File(pmtilesFilePath)));
+    final archive = await pm.PmTilesArchive.fromFile(File(pmtilesFilePath));
     _pmtilesArchive = archive;
 
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
