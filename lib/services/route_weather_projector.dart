@@ -1,5 +1,5 @@
 import 'dart:math';
-
+import 'package:horizon/services/route_geometry.dart';
 import 'package:horizon/services/routing_models.dart';
 import 'package:horizon/services/weather_engine_sota.dart';
 import 'package:horizon/services/weather_models.dart';
@@ -22,7 +22,7 @@ class RouteWeatherProjector {
       throw Exception('speedMetersPerSecond must be > 0');
     }
 
-    final totalLen = _polylineLengthMeters(polyline);
+    final totalLen = polylineLengthMeters(polyline);
     final effectiveEvery = maxSamples <= 2
         ? sampleEveryMeters
         : max(sampleEveryMeters, totalLen / (maxSamples - 1));
@@ -33,13 +33,13 @@ class RouteWeatherProjector {
     final out = <RouteWeatherSample>[];
     for (int i = 0; i < samples.length; i++) {
       if (i > 0) {
-        total += _haversineMeters(samples[i - 1], samples[i]);
+        total += haversineMeters(samples[i - 1], samples[i]);
       }
       final eta = departureTime.add(Duration(
         milliseconds: ((total / speedMetersPerSecond) * 1000).round(),
       ));
 
-      final heading = _bearingDegrees(
+      final heading = bearingDegrees(
         i == 0 ? samples[i] : samples[i - 1],
         i == 0 && samples.length > 1 ? samples[i + 1] : samples[i],
       );
@@ -50,7 +50,7 @@ class RouteWeatherProjector {
         userHeadingDegrees: heading,
       );
 
-      final rel = _angleDiffDegrees(heading, decision.now.windDirection);
+      final rel = angleDiffDegrees(heading, decision.now.windDirection);
       final headness = cos(rel * pi / 180.0).clamp(-1.0, 1.0);
       final crossness = sin(rel * pi / 180.0).abs().clamp(0.0, 1.0);
       final impact = (decision.now.windSpeed * (0.65 * crossness + 1.0 * max(0.0, headness))).clamp(0.0, 60.0);
@@ -108,25 +108,6 @@ class RouteWeatherProjector {
     );
   }
 
-  double _bearingDegrees(LatLng a, LatLng b) {
-    final lat1 = _deg2rad(a.latitude);
-    final lat2 = _deg2rad(b.latitude);
-    final dLon = _deg2rad(b.longitude - a.longitude);
-    final y = sin(dLon) * cos(lat2);
-    final x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
-    final brng = atan2(y, x) * 180.0 / pi;
-    var out = (brng + 360.0) % 360.0;
-    if (!out.isFinite) out = 0.0;
-    return out;
-  }
-
-  double _angleDiffDegrees(double a, double b) {
-    var d = (a - b) % 360.0;
-    if (d < 0) d += 360.0;
-    if (d > 180) d = 360.0 - d;
-    return d;
-  }
-
   RelativeWindKind _relativeWindKind(double headwindness, double crosswindness) {
     if (crosswindness >= 0.70) return RelativeWindKind.cross;
     if (headwindness <= -0.35) return RelativeWindKind.tail;
@@ -163,6 +144,4 @@ class RouteWeatherProjector {
       'features': features,
     };
   }
-
-  double _deg2rad(double d) => d * pi / 180.0;
 }

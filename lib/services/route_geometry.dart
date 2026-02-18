@@ -22,3 +22,21 @@ double polylineLengthMeters(List<LatLng> pts) {
   }
   return len;
 }
+double angleDiffDegrees(double a, double b) {
+  var d = (a - b) % 360.0;
+  if (d < 0) d += 360.0;
+  if (d > 180) d = 360.0 - d;
+  return d;
+}
+
+double bearingDegrees(LatLng a, LatLng b) {
+  final lat1 = a.latitude * pi / 180.0;
+  final lat2 = b.latitude * pi / 180.0;
+  final dLon = (b.longitude - a.longitude) * pi / 180.0;
+  final y = sin(dLon) * cos(lat2);
+  final x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
+  final brng = atan2(y, x) * 180.0 / pi;
+  var out = (brng + 360.0) % 360.0;
+  if (!out.isFinite) out = 0.0;
+  return out;
+}

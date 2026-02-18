@@ -1,5 +1,8 @@
+import 'dart:math';
+
 import 'package:horizon/core/constants/cycling_constants.dart';
 import 'package:horizon/services/comfort_profile.dart';
+import 'package:horizon/services/route_geometry.dart';
 import 'package:horizon/services/weather_models.dart';
 
 enum ComfortContributionKind {
@@ -117,7 +120,7 @@ class ComfortModel {
     double headwindness = 0.0;
     double crosswindness = 0.0;
     if (userHeadingDegrees != null) {
-      final rel = _angleDiffDegrees(userHeadingDegrees, s.windDirection);
+      final rel = angleDiffDegrees(userHeadingDegrees, s.windDirection);
       headwindness = cos(rel * pi / 180.0).clamp(-1.0, 1.0);
       crosswindness = sin(rel * pi / 180.0).abs().clamp(0.0, 1.0);
     }
@@ -163,12 +166,5 @@ class ComfortModel {
     contributions.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
 
     return ComfortBreakdown(score: comfort, contributions: contributions);
-  }
-
-  double _angleDiffDegrees(double a, double b) {
-    var d = (a - b) % 360.0;
-    if (d < 0) d += 360.0;
-    if (d > 180) d = 360.0 - d;
-    return d;
   }
 }

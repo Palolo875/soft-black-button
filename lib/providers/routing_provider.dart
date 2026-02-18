@@ -238,8 +238,6 @@ class RoutingProvider with ChangeNotifier {
     if (start == null || end == null) return;
     if (!_styleLoaded) return;
 
-    await _ensureRouteLayers();
-
     final now = DateTime.now();
     final last = _lastRouteComputeAt;
     if (last != null && now.difference(last) < CyclingConstants.routeComputeThrottle) {
@@ -327,7 +325,7 @@ class RoutingProvider with ChangeNotifier {
   }
 
   Future<void> _afterVariantsUpdated() async {
-    unawaited(_renderRouteMarkers());
+    _renderRouteMarkers();
     await _renderSelectedRoute();
     unawaited(_evaluateAndNotifyContextual());
   }
@@ -523,8 +521,8 @@ class RoutingProvider with ChangeNotifier {
     }
   }
 
-  void _renderRouteMarkers() {
-    _mapRenderer.render(
+  Future<void> _renderRouteMarkers() async {
+    await _mapRenderer.render(
       controller: _mapController,
       styleLoaded: _styleLoaded,
       start: _routeStart,
@@ -534,11 +532,11 @@ class RoutingProvider with ChangeNotifier {
     );
   }
 
-  void _renderSelectedRoute() {
+  Future<void> _renderSelectedRoute() async {
     final v = _currentVariant();
     if (v == null) return;
     final geo = _routeWeatherProjector.buildSegments(v);
-    _mapRenderer.render(
+    await _mapRenderer.render(
       controller: _mapController,
       styleLoaded: _styleLoaded,
       start: _routeStart,
