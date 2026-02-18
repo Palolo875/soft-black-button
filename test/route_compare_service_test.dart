@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/services/route_compare_service.dart';
-import 'package:app/services/route_weather_projector.dart';
-import 'package:app/services/routing_models.dart';
-import 'package:app/services/weather_models.dart';
+import 'package:horizon/services/route_compare_service.dart';
+import 'package:horizon/services/route_weather_projector.dart';
+import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 class _FakeProjector extends RouteWeatherProjector {

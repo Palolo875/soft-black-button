@@ -1,5 +1,5 @@
-import 'package:app/services/comfort_profile.dart';
-import 'package:app/services/secure_file_store.dart';
+import 'package:horizon/services/comfort_profile.dart';
+import 'package:horizon/services/secure_file_store.dart';
 
 class ComfortProfileStore {
   static const _key = 'comfort_profile_v1';

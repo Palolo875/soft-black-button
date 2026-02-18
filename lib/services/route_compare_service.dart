@@ -1,8 +1,8 @@
 import 'dart:math';
 
-import 'package:app/services/route_weather_projector.dart';
-import 'package:app/services/routing_models.dart';
-import 'package:app/services/weather_models.dart';
+import 'package:horizon/services/route_weather_projector.dart';
+import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/weather_models.dart';
 
 class RouteDepartureComparison {
   final Duration offset;

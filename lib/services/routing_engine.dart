@@ -1,6 +1,6 @@
-import 'package:app/services/route_weather_projector.dart';
-import 'package:app/services/routing_models.dart';
-import 'package:app/services/valhalla_client.dart';
+import 'package:horizon/services/route_weather_projector.dart';
+import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/valhalla_client.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 class RoutingEngine {

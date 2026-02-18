@@ -6,10 +6,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:pmtiles/pmtiles.dart' as pm;
-import 'package:app/services/offline_core.dart';
-import 'package:app/services/offline_registry.dart';
-import 'package:app/services/secure_http_client.dart';
-import 'package:app/core/log/app_log.dart';
+import 'package:horizon/services/offline_core.dart';
+import 'package:horizon/services/offline_registry.dart';
+import 'package:horizon/services/secure_http_client.dart';
+import 'package:horizon/core/log/app_log.dart';
 
 class OfflineService {
   HttpServer? _pmtilesServer;

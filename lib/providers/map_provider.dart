@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:app/services/routing_models.dart';
-import 'package:app/services/privacy_service.dart';
-import 'package:app/services/analytics_service.dart';
-import 'package:app/services/perf_metrics.dart';
-import 'package:app/providers/routing_provider.dart';
-import 'package:app/providers/offline_provider.dart';
-import 'package:app/core/log/app_log.dart';
-import 'package:app/core/format/confidence_label.dart';
+import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/privacy_service.dart';
+import 'package:horizon/services/analytics_service.dart';
+import 'package:horizon/services/perf_metrics.dart';
+import 'package:horizon/providers/routing_provider.dart';
+import 'package:horizon/providers/offline_provider.dart';
+import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/core/format/confidence_label.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;

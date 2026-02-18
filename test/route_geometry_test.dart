@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/services/route_geometry.dart';
+import 'package:horizon/services/route_geometry.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 void main() {

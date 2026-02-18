@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:app/services/secure_http_client.dart';
+import 'package:horizon/services/secure_http_client.dart';
 
 class OpenMeteoAdapter {
   final SecureHttpClient _http;

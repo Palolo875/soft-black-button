@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
-import 'package:app/services/secure_file_store.dart';
-import 'package:app/core/log/app_log.dart';
+import 'package:horizon/services/secure_file_store.dart';
+import 'package:horizon/core/log/app_log.dart';
 
 class RouteCacheEntry {
   final DateTime savedAt;

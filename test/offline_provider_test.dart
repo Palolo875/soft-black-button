@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:app/providers/offline_provider.dart';
-import 'package:app/services/offline_registry.dart';
-import 'package:app/services/offline_service.dart';
+import 'package:horizon/providers/offline_provider.dart';
+import 'package:horizon/services/offline_registry.dart';
+import 'package:horizon/services/offline_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 

@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/services/offline_integrity.dart';
+import 'package:horizon/services/offline_integrity.dart';
 
 void main() {
   test('sha256OfString matches sha256OfFile content', () async {

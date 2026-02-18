@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/services/explainability_engine.dart';
-import 'package:app/services/routing_models.dart';
-import 'package:app/services/weather_models.dart';
+import 'package:horizon/services/explainability_engine.dart';
+import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 void main() {

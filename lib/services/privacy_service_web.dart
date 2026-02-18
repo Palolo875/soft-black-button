@@ -1,4 +1,4 @@
-import 'package:app/services/secure_file_store.dart';
+import 'package:horizon/services/secure_file_store.dart';
 
 class LocalDataReport {
   final int secureStoreBytes;

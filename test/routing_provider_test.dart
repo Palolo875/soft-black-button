@@ -1,15 +1,15 @@
-import 'package:app/providers/routing_provider.dart';
-import 'package:app/services/analytics_service.dart';
-import 'package:app/services/explainability_engine.dart';
-import 'package:app/services/gpx_import_service.dart';
-import 'package:app/services/horizon_scheduler.dart';
-import 'package:app/services/perf_metrics.dart';
-import 'package:app/services/route_cache.dart';
-import 'package:app/services/route_compare_service.dart';
-import 'package:app/services/route_weather_projector.dart';
-import 'package:app/services/routing_engine.dart';
-import 'package:app/services/routing_models.dart';
-import 'package:app/services/notification_service.dart';
+import 'package:horizon/providers/routing_provider.dart';
+import 'package:horizon/services/analytics_service.dart';
+import 'package:horizon/services/explainability_engine.dart';
+import 'package:horizon/services/gpx_import_service.dart';
+import 'package:horizon/services/horizon_scheduler.dart';
+import 'package:horizon/services/perf_metrics.dart';
+import 'package:horizon/services/route_cache.dart';
+import 'package:horizon/services/route_compare_service.dart';
+import 'package:horizon/services/route_weather_projector.dart';
+import 'package:horizon/services/routing_engine.dart';
+import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/notification_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 

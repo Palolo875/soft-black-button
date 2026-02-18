@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/services/comfort_model.dart';
-import 'package:app/services/comfort_profile.dart';
-import 'package:app/services/weather_models.dart';
+import 'package:horizon/services/comfort_model.dart';
+import 'package:horizon/services/comfort_profile.dart';
+import 'package:horizon/services/weather_models.dart';
 
 void main() {
   group('ComfortContribution', () {

@@ -1,6 +1,6 @@
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import 'package:app/services/comfort_model.dart';
+import 'package:horizon/services/comfort_model.dart';
 
 class WeatherSnapshot {
   final DateTime timestamp;

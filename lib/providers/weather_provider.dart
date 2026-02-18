@@ -4,18 +4,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import 'package:app/core/log/app_log.dart';
-import 'package:app/services/analytics_service.dart';
-import 'package:app/services/horizon_scheduler.dart';
-import 'package:app/services/perf_metrics.dart';
-import 'package:app/services/weather_engine_sota.dart';
-import 'package:app/services/weather_models.dart';
-import 'package:app/services/weather_service.dart';
-import 'package:app/core/format/confidence_label.dart';
+import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/format/confidence_label.dart';
+import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/analytics_service.dart';
+import 'package:horizon/services/horizon_scheduler.dart';
+import 'package:horizon/services/perf_metrics.dart';
+import 'package:horizon/services/weather_engine_sota.dart';
+import 'package:horizon/services/weather_models.dart';
+import 'package:horizon/services/weather_service.dart';
+
+import 'package:horizon/services/weather_map_renderer.dart';
 
 class WeatherProvider with ChangeNotifier {
   final WeatherService _weatherService;
   final WeatherEngineSota _weatherEngine;
+  final WeatherMapRenderer _mapRenderer;
   final HorizonScheduler _scheduler;
   final PerfMetrics _metrics;
   final AnalyticsService _analytics;
@@ -56,18 +60,20 @@ class WeatherProvider with ChangeNotifier {
     required HorizonScheduler scheduler,
     required PerfMetrics metrics,
     required AnalyticsService analytics,
+    WeatherMapRenderer mapRenderer = const WeatherMapRenderer(),
   })  : _weatherService = weatherService,
         _weatherEngine = weatherEngine,
         _scheduler = scheduler,
         _metrics = metrics,
-        _analytics = analytics;
+        _analytics = analytics,
+        _mapRenderer = mapRenderer;
 
   void setController(MaplibreMapController controller) {
     _mapController = controller;
     if (_styleLoaded) {
       _weatherService.initWeather(controller: controller);
       _startWeatherAutoRefresh();
-      unawaited(_ensureExpertWeatherLayers());
+      unawaited(_mapRenderer.initLayers(controller).then((_) => _renderExpertWeatherLayers()));
     }
   }
 
@@ -76,7 +82,7 @@ class WeatherProvider with ChangeNotifier {
     if (loaded && _mapController != null) {
       _weatherService.initWeather(controller: _mapController!);
       _startWeatherAutoRefresh();
-      unawaited(_ensureExpertWeatherLayers());
+      unawaited(_mapRenderer.initLayers(_mapController!).then((_) => _renderExpertWeatherLayers()));
     }
   }
 
@@ -150,6 +156,7 @@ class WeatherProvider with ChangeNotifier {
       _metrics.inc('weather_refresh');
       unawaited(_metrics.flush());
       unawaited(_analytics.record('weather_refreshed', props: {'trigger': userInitiated ? 'user' : 'auto'}));
+      unawaited(_renderExpertWeatherLayers());
     } catch (e, st) {
       AppLog.e('weather.refreshWeather failed', error: e, stackTrace: st, props: {
         'userInitiated': userInitiated,
@@ -163,189 +170,17 @@ class WeatherProvider with ChangeNotifier {
     }
   }
 
-  Future<void> _ensureExpertWeatherLayers() async {
-    final controller = _mapController;
-    if (controller == null) return;
-
-    try {
-      await controller.addSource('expert-weather', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('weather.ensureExpertWeatherLayers addSource(expert-weather) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    try {
-      await controller.addCircleLayer(
-        'expert-weather',
-        'expert-wind-layer',
-        const CircleLayerProperties(
-          circleRadius: [
-            'interpolate',
-            ['linear'],
-            ['get', 'windKmh'],
-            0,
-            2.0,
-            25,
-            5.0,
-            55,
-            9.0,
-          ],
-          circleColor: [
-            'interpolate',
-            ['linear'],
-            ['get', 'windKmh'],
-            0,
-            '#ABC9D3',
-            25,
-            '#4A90A0',
-            55,
-            '#2E2E2E',
-          ],
-          circleOpacity: 0.55,
-          circleBlur: 0.2,
-        ),
-      );
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('weather.ensureExpertWeatherLayers addCircleLayer(expert-wind-layer) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    try {
-      await controller.addCircleLayer(
-        'expert-weather',
-        'expert-rain-layer',
-        const CircleLayerProperties(
-          circleRadius: [
-            'interpolate',
-            ['linear'],
-            ['get', 'rainMmH'],
-            0,
-            1.0,
-            1,
-            4.0,
-            5,
-            9.0,
-          ],
-          circleColor: [
-            'interpolate',
-            ['linear'],
-            ['get', 'rainMmH'],
-            0,
-            '#ffffff',
-            1,
-            '#5AA6B5',
-            5,
-            '#2B4C9A',
-          ],
-          circleOpacity: 0.42,
-          circleBlur: 0.35,
-        ),
-      );
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('weather.ensureExpertWeatherLayers addCircleLayer(expert-rain-layer) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    try {
-      await controller.addCircleLayer(
-        'expert-weather',
-        'expert-cloud-layer',
-        const CircleLayerProperties(
-          circleRadius: [
-            'interpolate',
-            ['linear'],
-            ['get', 'cloudPct'],
-            0,
-            1.0,
-            100,
-            8.0,
-          ],
-          circleColor: [
-            'interpolate',
-            ['linear'],
-            ['get', 'cloudPct'],
-            0,
-            '#B4C6D6',
-            100,
-            '#808A94',
-          ],
-          circleOpacity: 0.28,
-          circleBlur: 0.25,
-        ),
-      );
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('weather.ensureExpertWeatherLayers addCircleLayer(expert-cloud-layer) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    await _renderExpertWeatherLayers();
-  }
-
   Future<void> _renderExpertWeatherLayers() async {
-    final controller = _mapController;
-    if (controller == null) return;
-    if (!_styleLoaded) return;
-
-    if (!_expertWeatherMode) {
-      try {
-        await controller.setGeoJsonSource('expert-weather', _emptyFeatureCollection());
-      } catch (e, st) {
-        assert(() {
-          AppLog.w('weather.renderExpertWeatherLayers clear source failed', error: e, stackTrace: st);
-          return true;
-        }());
-      }
-      return;
-    }
-
-    final points = <Map<String, Object?>>[];
-    if (_lastWeatherPosition != null && _weatherDecision != null) {
-      final p = _lastWeatherPosition!;
-      final s = _weatherDecision!.now;
-      points.add({
-        'type': 'Feature',
-        'properties': {
-          'windKmh': s.windSpeed * 3.6,
-          'rainMmH': s.precipitation,
-          'cloudPct': (s.cloudCover * 100).clamp(0, 100),
-        },
-        'geometry': {
-          'type': 'Point',
-          'coordinates': [p.longitude, p.latitude],
-        },
-      });
-    }
-
-    try {
-      await controller.setGeoJsonSource('expert-weather', {
-        'type': 'FeatureCollection',
-        'features': points,
-      });
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('weather.renderExpertWeatherLayers setGeoJsonSource failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    try {
-      await controller.setPaintProperty('expert-wind-layer', 'circle-opacity', _expertWindLayer ? 0.55 : 0.0);
-      await controller.setPaintProperty('expert-rain-layer', 'circle-opacity', _expertRainLayer ? 0.42 : 0.0);
-      await controller.setPaintProperty('expert-cloud-layer', 'circle-opacity', _expertCloudLayer ? 0.28 : 0.0);
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('weather.renderExpertWeatherLayers setPaintProperty failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
+    await _mapRenderer.render(
+      controller: _mapController,
+      styleLoaded: _styleLoaded,
+      expertWeatherMode: _expertWeatherMode,
+      expertWindLayer: _expertWindLayer,
+      expertRainLayer: _expertRainLayer,
+      expertCloudLayer: _expertCloudLayer,
+      lastPosition: _lastWeatherPosition,
+      decision: _weatherDecision,
+    );
   }
 
   void setExpertWeatherMode(bool enabled) {
@@ -372,14 +207,9 @@ class WeatherProvider with ChangeNotifier {
     unawaited(_renderExpertWeatherLayers());
   }
 
-  Map<String, dynamic> _emptyFeatureCollection() => const {
-        'type': 'FeatureCollection',
-        'features': [],
-      };
-
   void _startWeatherAutoRefresh() {
     _weatherRefreshTimer?.cancel();
-    _weatherRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+    _weatherRefreshTimer = Timer.periodic(CyclingConstants.weatherAutoRefreshInterval, (_) {
       final pos = _lastWeatherPosition;
       if (pos == null) return;
       if (!_appInForeground) return;

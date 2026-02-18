@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'dart:html' as html;
 
-import 'package:app/core/log/app_log.dart';
+import 'package:horizon/core/log/app_log.dart';
 
 class SecureFileStore {
   static const _prefix = 'horizon_secure_store_v1:';

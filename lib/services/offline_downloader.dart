@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:app/services/offline_integrity.dart';
+import 'package:horizon/services/offline_integrity.dart';
 import 'package:http/http.dart' as http;
-import 'package:app/services/secure_http_client.dart';
-import 'package:app/core/log/app_log.dart';
+import 'package:horizon/services/secure_http_client.dart';
+import 'package:horizon/core/log/app_log.dart';
 
 class OfflineDownloader {
   final OfflineIntegrity _integrity;

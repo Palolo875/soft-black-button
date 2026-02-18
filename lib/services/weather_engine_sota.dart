@@ -1,13 +1,14 @@
 import 'dart:math';
 
-import 'package:app/core/log/app_log.dart';
-import 'package:app/services/metno_adapter.dart';
-import 'package:app/services/open_meteo_adapter.dart';
-import 'package:app/services/comfort_model.dart';
-import 'package:app/services/comfort_profile.dart';
-import 'package:app/services/comfort_profile_store.dart';
-import 'package:app/services/weather_cache.dart';
-import 'package:app/services/weather_models.dart';
+import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/metno_adapter.dart';
+import 'package:horizon/services/open_meteo_adapter.dart';
+import 'package:horizon/services/comfort_model.dart';
+import 'package:horizon/services/comfort_profile.dart';
+import 'package:horizon/services/comfort_profile_store.dart';
+import 'package:horizon/services/weather_cache.dart';
+import 'package:horizon/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 class WeatherEngineSota {
@@ -41,7 +42,7 @@ class WeatherEngineSota {
   }
 
   static String cacheKeyFor(LatLng p) {
-    double round(double v) => (v * 50).roundToDouble() / 50;
+    double round(double v) => (v * CyclingConstants.cacheGridFactor).roundToDouble() / CyclingConstants.cacheGridFactor;
     return 'v2_${round(p.latitude)}_${round(p.longitude)}';
   }
 
@@ -236,15 +237,15 @@ class WeatherEngineSota {
   }
 
   double _confidenceHeuristic(WeatherPoint p) {
-    if (p.timeline.length < 3) return 0.6;
+    if (p.timeline.length < 3) return CyclingConstants.confidenceHeuristicFallback;
     final now = _pickNearest(p, DateTime.now().toUtc());
     final idx = p.timeline.indexOf(now);
-    if (idx < 0) return 0.6;
+    if (idx < 0) return CyclingConstants.confidenceHeuristicFallback;
 
     final next1 = p.timeline.elementAtOrNull(idx + 1);
     final next2 = p.timeline.elementAtOrNull(idx + 2);
 
-    double score = 0.85;
+    double score = CyclingConstants.confidenceHeuristicBase;
 
     double delta(double a, double b) => (a - b).abs();
 
@@ -256,63 +257,10 @@ class WeatherEngineSota {
       score -= min(0.20, delta(now.precipitation, next2.precipitation) / 4.0);
     }
 
-    if (now.precipitation >= 2.0) score -= 0.2;
-    if (now.precipitation >= 5.0) score -= 0.2;
+    if (now.precipitation >= CyclingConstants.confidenceHeuristicRainHeavy) score -= 0.2;
+    if (now.precipitation >= CyclingConstants.confidenceHeuristicRainExtreme) score -= 0.2;
 
     return score.clamp(0.25, 0.95);
   }
-
-  double _comfortBike(
-    WeatherSnapshot s, {
-    double? userHeadingDegrees,
-  }) {
-    double penalty = 0.0;
-
-    final r = s.precipitation;
-    if (r <= 0.1) {
-      penalty += 0.0;
-    } else if (r <= 0.5) {
-      penalty += 1.5;
-    } else if (r <= 1.5) {
-      penalty += 3.5;
-    } else if (r <= 4.0) {
-      penalty += 6.0;
-    } else {
-      penalty += 8.0;
-    }
-
-    final t = s.apparentTemperature.isFinite ? s.apparentTemperature : s.temperature;
-    final dt = (t - 18.0).abs();
-    penalty += min(5.0, pow(dt / 6.0, 1.3).toDouble());
-
-    final w = s.windSpeed;
-    double windFactor = 1.0;
-    if (userHeadingDegrees != null) {
-      final rel = _angleDiffDegrees(userHeadingDegrees, s.windDirection);
-      final headness = cos((rel) * pi / 180.0);
-      windFactor = (1.0 + 0.8 * headness).clamp(0.4, 1.8);
-    }
-    penalty += min(6.0, (w / 8.0) * windFactor);
-
-    if (t >= 22.0 && s.humidity.isFinite) {
-      penalty += min(1.5, (s.humidity - 60.0).clamp(0.0, 40.0) / 30.0);
-    }
-
-    final comfort = 10.0 - penalty;
-    return comfort.clamp(1.0, 10.0);
-  }
-
-  double _angleDiffDegrees(double a, double b) {
-    var d = (a - b) % 360.0;
-    if (d < 0) d += 360.0;
-    if (d > 180) d = 360.0 - d;
-    return d;
-  }
 }
 
-extension ListX<T> on List<T> {
-  T? elementAtOrNull(int index) {
-    if (index < 0 || index >= length) return null;
-    return this[index];
-  }
-}

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/main.dart';
-import 'package:app/core/di/app_dependencies.dart';
-import 'package:app/features/map/presentation/map_screen.dart';
+import 'package:horizon/main.dart';
+import 'package:horizon/core/di/app_dependencies.dart';
+import 'package:horizon/features/map/presentation/map_screen.dart';
 
 void main() {
   testWidgets('App basic smoke test', (WidgetTester tester) async {

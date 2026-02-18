@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:app/core/log/app_log.dart';
-import 'package:app/services/offline_downloader.dart';
-import 'package:app/services/offline_integrity.dart';
-import 'package:app/services/offline_lru.dart';
-import 'package:app/services/offline_registry.dart';
+import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/offline_downloader.dart';
+import 'package:horizon/services/offline_integrity.dart';
+import 'package:horizon/services/offline_lru.dart';
+import 'package:horizon/services/offline_registry.dart';
 
 class OfflineCore {
   final OfflineRegistry registry;

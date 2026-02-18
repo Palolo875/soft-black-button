@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:app/core/log/app_log.dart';
+import 'package:horizon/core/log/app_log.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStorage {

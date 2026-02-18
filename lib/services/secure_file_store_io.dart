@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:app/core/log/app_log.dart';
-import 'package:app/services/local_crypto.dart';
-import 'package:app/services/secure_storage.dart';
+import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/local_crypto.dart';
+import 'package:horizon/services/secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
 class SecureFileStore {

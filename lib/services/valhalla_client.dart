@@ -1,9 +1,10 @@
 import 'dart:convert';
 
-import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:app/services/secure_http_client.dart';
-import 'package:app/core/log/app_log.dart';
+import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/secure_http_client.dart';
 import 'package:http/http.dart' as http;
+import 'package:maplibre_gl/maplibre_gl.dart';
 
 class ValhallaRouteResult {
   final List<LatLng> shape;
@@ -163,7 +164,7 @@ List<LatLng> decodePolyline6(String encoded) {
     index = lngRes.$2;
     lng += dLng;
 
-    coordinates.add(LatLng(lat / 1e6, lng / 1e6));
+    coordinates.add(LatLng(lat / CyclingConstants.polyline6Precision, lng / CyclingConstants.polyline6Precision));
   }
 
   return coordinates;

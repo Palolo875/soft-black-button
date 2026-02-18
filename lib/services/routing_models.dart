@@ -1,4 +1,4 @@
-import 'package:app/services/weather_models.dart';
+import 'package:horizon/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 enum RouteVariantKind { fast, safe, scenic, imported }

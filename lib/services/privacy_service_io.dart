@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:app/core/log/app_log.dart';
-import 'package:app/services/offline_registry.dart';
-import 'package:app/services/secure_file_store.dart';
+import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/offline_registry.dart';
+import 'package:horizon/services/secure_file_store.dart';
 import 'package:path_provider/path_provider.dart';
 
 class LocalDataReport {

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/services/theme_settings_store.dart';
-import 'package:app/services/secure_file_store.dart';
+import 'package:horizon/services/theme_settings_store.dart';
+import 'package:horizon/services/secure_file_store.dart';
 
 class _MemorySecureFileStore implements SecureFileStore {
   final Map<String, Map<String, dynamic>> _db = <String, Map<String, dynamic>>{};

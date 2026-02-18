@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:app/services/secure_http_client.dart';
+import 'package:horizon/services/secure_http_client.dart';
 
 class MetNoAdapter {
   static const _base = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';

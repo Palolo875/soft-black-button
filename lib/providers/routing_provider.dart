@@ -1,22 +1,24 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:horizon/core/constants/cycling_constants.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import 'package:app/core/log/app_log.dart';
-import 'package:app/services/analytics_service.dart';
-import 'package:app/services/explainability_engine.dart';
-import 'package:app/services/gpx_import_service.dart';
-import 'package:app/services/horizon_scheduler.dart';
-import 'package:app/services/perf_metrics.dart';
-import 'package:app/services/route_cache.dart';
-import 'package:app/services/route_compare_service.dart';
-import 'package:app/services/route_weather_projector.dart';
-import 'package:app/services/routing_engine.dart';
-import 'package:app/services/routing_models.dart';
-import 'package:app/services/notification_service.dart';
-import 'package:app/core/format/confidence_label.dart';
+import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/analytics_service.dart';
+import 'package:horizon/services/explainability_engine.dart';
+import 'package:horizon/services/gpx_import_service.dart';
+import 'package:horizon/services/horizon_scheduler.dart';
+import 'package:horizon/services/perf_metrics.dart';
+import 'package:horizon/services/route_cache.dart';
+import 'package:horizon/services/route_compare_service.dart';
+import 'package:horizon/services/route_weather_projector.dart';
+import 'package:horizon/services/routing_engine.dart';
+import 'package:horizon/services/notification_service.dart';
+import 'package:horizon/services/routing_map_renderer.dart';
+import 'package:horizon/core/format/confidence_label.dart';
 
 class RoutingProvider with ChangeNotifier {
   final RoutingEngine _routingEngine;
@@ -29,6 +31,7 @@ class RoutingProvider with ChangeNotifier {
   final RouteWeatherProjector _routeWeatherProjector;
   final ExplainabilityEngine _explainability;
   final NotificationService _notifications;
+  final RoutingMapRenderer _mapRenderer;
 
   MaplibreMapController? _mapController;
   bool _styleLoaded = false;
@@ -87,6 +90,7 @@ class RoutingProvider with ChangeNotifier {
     required RouteWeatherProjector routeWeatherProjector,
     required ExplainabilityEngine explainability,
     required NotificationService notifications,
+    RoutingMapRenderer mapRenderer = const RoutingMapRenderer(),
   })  : _routingEngine = routingEngine,
         _routeCache = routeCache,
         _scheduler = scheduler,
@@ -96,19 +100,28 @@ class RoutingProvider with ChangeNotifier {
         _gpxImport = gpxImport,
         _routeWeatherProjector = routeWeatherProjector,
         _explainability = explainability,
-        _notifications = notifications;
+        _notifications = notifications,
+        _mapRenderer = mapRenderer;
 
   void setController(MaplibreMapController controller) {
     _mapController = controller;
+    if (_styleLoaded) {
+      unawaited(_mapRenderer.initLayers(controller).then((_) {
+        _renderRouteMarkers();
+        _renderSelectedRoute();
+      }));
+    }
   }
 
   void setStyleLoaded(bool loaded) {
     _styleLoaded = loaded;
-    if (loaded) {
-      unawaited(_ensureRouteLayers());
+    if (loaded && _mapController != null) {
+      unawaited(_mapRenderer.initLayers(_mapController!).then((_) {
+        _renderRouteMarkers();
+        _renderSelectedRoute();
+      }));
     }
   }
-
   void syncIsOnline(bool? isOnline) {
     _isOnline = isOnline;
   }
@@ -164,10 +177,12 @@ class RoutingProvider with ChangeNotifier {
     _routeExplanation = null;
     _routeExplanations = const {};
     _selectedRouteWeatherSample = null;
+    _departureCompareCache = null;
+    _departureWindowCache = null;
     notifyListeners();
-    unawaited(_renderRouteMarkers());
+    _renderRouteMarkers();
     _routeDebounce?.cancel();
-    _routeDebounce = Timer(const Duration(milliseconds: 450), () {
+    _routeDebounce = Timer(CyclingConstants.routePointDebounce, () {
       final snap = SchedulerSnapshot(
         appInForeground: _appInForeground,
         isOnline: _isOnline ?? true,
@@ -191,8 +206,12 @@ class RoutingProvider with ChangeNotifier {
     _selectedRouteWeatherSample = null;
     _routeDebounce?.cancel();
     _gpxRouteName = null;
+    _selectedVariant = RouteVariantKind.fast;
+    _departureCompareCache = null;
+    _departureWindowCache = null;
     notifyListeners();
-    await _clearRouteLayers();
+    _mapRenderer.clearMarkers(_mapController);
+    _mapRenderer.clear(_mapController);
   }
 
   void selectRouteVariant(RouteVariantKind kind) {
@@ -201,7 +220,7 @@ class RoutingProvider with ChangeNotifier {
     _selectedRouteWeatherSample = null;
     _routeExplanation = currentRouteExplanation?.headline;
     notifyListeners();
-    unawaited(_renderSelectedRoute());
+    _renderSelectedRoute();
     unawaited(_evaluateAndNotifyContextual());
   }
 
@@ -223,7 +242,7 @@ class RoutingProvider with ChangeNotifier {
 
     final now = DateTime.now();
     final last = _lastRouteComputeAt;
-    if (last != null && now.difference(last) < const Duration(seconds: 2)) {
+    if (last != null && now.difference(last) < CyclingConstants.routeComputeThrottle) {
       return;
     }
     _lastRouteComputeAt = now;
@@ -262,9 +281,9 @@ class RoutingProvider with ChangeNotifier {
         start: start,
         end: end,
         departureTime: _forecastBaseUtc(),
-        speedMetersPerSecond: 4.2,
-        sampleEveryMeters: _lowPowerMode ? 900 : 450,
-        maxSamples: _lowPowerMode ? 60 : 120,
+        speedMetersPerSecond: CyclingConstants.defaultSpeedMps,
+        sampleEveryMeters: _lowPowerMode ? CyclingConstants.sampleIntervalMetersLowPower : CyclingConstants.sampleIntervalMeters,
+        maxSamples: _lowPowerMode ? CyclingConstants.maxSamplesLowPower : CyclingConstants.maxSamples,
       );
       sw.stop();
 
@@ -320,7 +339,14 @@ class RoutingProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final res = await _gpxImport.pickAndParse();
+      final resObj = await _gpxImport.pickAndParse();
+      if (resObj.isFailure) {
+        _gpxImportLoading = false;
+        _gpxImportError = resObj.errorOrNull.toString();
+        notifyListeners();
+        return;
+      }
+      final res = resObj.valueOrNull;
       if (res == null) {
         _gpxImportLoading = false;
         notifyListeners();
@@ -339,32 +365,34 @@ class RoutingProvider with ChangeNotifier {
       final weatherSamples = await _routeWeatherProjector.projectAlongPolyline(
         polyline: shape,
         departureTime: _forecastBaseUtc(),
-        speedMetersPerSecond: 4.2,
-        sampleEveryMeters: _lowPowerMode ? 900 : 450,
-        maxSamples: _lowPowerMode ? 60 : 120,
+        speedMetersPerSecond: CyclingConstants.defaultSpeedMps,
+        sampleEveryMeters: _lowPowerMode ? CyclingConstants.sampleIntervalMetersLowPower : CyclingConstants.sampleIntervalMeters,
+        maxSamples: _lowPowerMode ? CyclingConstants.maxSamplesLowPower : CyclingConstants.maxSamples,
       );
 
       _routeStart = shape.first;
       _routeEnd = shape.last;
-      _routeVariants = [
-        RouteVariant(
-          kind: RouteVariantKind.imported,
-          shape: shape,
-          lengthKm: lenMeters / 1000.0,
-          timeSeconds: (lenMeters / 4.2),
-          weatherSamples: weatherSamples,
-        ),
-      ];
+      final v = RouteVariant(
+        kind: RouteVariantKind.imported,
+        shape: shape,
+        lengthKm: lenMeters / 1000.0,
+        timeSeconds: (lenMeters / CyclingConstants.defaultSpeedMps),
+        weatherSamples: weatherSamples,
+      );
+      final explanation = _explainability.explain(v: v, allMetrics: {v.kind: _explainability.metricsFor(v)});
+      _routeVariants = [v];
       _selectedVariant = RouteVariantKind.imported;
-      _routeExplanations = _buildRouteExplanations(_routeVariants);
-      _routeExplanation = currentRouteExplanation?.headline;
+      _routeExplanation = null;
+      _routeExplanations = {RouteVariantKind.imported: explanation};
       _gpxRouteName = res.fileName;
+      _departureCompareCache = null;
+      _departureWindowCache = null;
 
       _gpxImportLoading = false;
       notifyListeners();
 
-      unawaited(_renderRouteMarkers());
-      await _renderSelectedRoute();
+      _renderRouteMarkers();
+      _renderSelectedRoute();
       unawaited(_evaluateAndNotifyContextual());
     } catch (e, st) {
       AppLog.e('routing.importGpxRoute failed', error: e, stackTrace: st);
@@ -380,21 +408,17 @@ class RoutingProvider with ChangeNotifier {
 
     final cache = _departureCompareCache;
     final now = DateTime.now();
-    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < const Duration(seconds: 25)) {
+    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < CyclingConstants.departureCompareCacheTtl) {
       return cache.items;
     }
 
     return _routeCompare.compareDepartures(
       variant: v,
       baseDepartureUtc: _forecastBaseUtc(),
-      speedMetersPerSecond: 4.2,
-      offsets: const [
-        Duration.zero,
-        Duration(minutes: 30),
-        Duration(minutes: 60),
-      ],
-      sampleEveryMeters: _lowPowerMode ? 900 : 450,
-      maxSamples: _lowPowerMode ? 60 : 120,
+      speedMetersPerSecond: CyclingConstants.defaultSpeedMps,
+      offsets: CyclingConstants.departureCompareOffsets,
+      sampleEveryMeters: _lowPowerMode ? CyclingConstants.sampleIntervalMetersLowPower : CyclingConstants.sampleIntervalMeters,
+      maxSamples: _lowPowerMode ? CyclingConstants.maxSamplesLowPower : CyclingConstants.maxSamples,
     ).then((items) {
       _departureCompareCache = _DepartureCompareCacheEntry(kind: v.kind, at: DateTime.now(), items: items);
       return items;
@@ -407,18 +431,18 @@ class RoutingProvider with ChangeNotifier {
 
     final cache = _departureWindowCache;
     final now = DateTime.now();
-    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < const Duration(seconds: 45)) {
+    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < CyclingConstants.departureWindowCacheTtl) {
       return cache.item;
     }
 
     final rec = await _routeCompare.recommendDepartureWindow(
       variant: v,
       baseDepartureUtc: _forecastBaseUtc(),
-      speedMetersPerSecond: 4.2,
-      horizon: const Duration(hours: 6),
-      step: const Duration(minutes: 20),
-      sampleEveryMeters: _lowPowerMode ? 900 : 450,
-      maxSamples: _lowPowerMode ? 60 : 120,
+      speedMetersPerSecond: CyclingConstants.defaultSpeedMps,
+      horizon: CyclingConstants.departureWindowHorizon,
+      step: CyclingConstants.departureWindowStep,
+      sampleEveryMeters: _lowPowerMode ? CyclingConstants.sampleIntervalMetersLowPower : CyclingConstants.sampleIntervalMeters,
+      maxSamples: _lowPowerMode ? CyclingConstants.maxSamplesLowPower : CyclingConstants.maxSamples,
     );
     _departureWindowCache = _DepartureWindowCacheEntry(kind: v.kind, at: DateTime.now(), item: rec);
     return rec;
@@ -478,14 +502,14 @@ class RoutingProvider with ChangeNotifier {
 
     final now = DateTime.now();
     final last = _lastNotificationAt;
-    if (last != null && now.difference(last) < const Duration(minutes: 30)) return;
+    if (last != null && now.difference(last) < CyclingConstants.notificationCooldown) return;
 
     // Find first reasonably confident rain risk in the next 45 minutes.
-    final horizon = now.toUtc().add(const Duration(minutes: 45));
+    final horizon = now.toUtc().add(CyclingConstants.weatherAlertHorizon);
     for (final s in v.weatherSamples) {
       if (s.eta.isAfter(horizon)) break;
-      if (s.confidence < 0.5) continue;
-      if (s.snapshot.precipitation < 2.0) continue;
+      if (s.confidence < CyclingConstants.rainAlertMinConfidence) continue;
+      if (s.snapshot.precipitation < CyclingConstants.rainAlertThresholdMm) continue;
 
       final etaLocal = s.eta.toLocal();
       final hh = etaLocal.hour.toString().padLeft(2, '0');
@@ -499,137 +523,33 @@ class RoutingProvider with ChangeNotifier {
     }
   }
 
-  Future<void> _renderRouteMarkers() async {
-    final controller = _mapController;
-    if (controller == null) return;
-    if (!_styleLoaded) return;
-
-    await _ensureRouteLayers();
-
-    final start = _routeStart;
-    final end = _routeEnd;
-
-    final features = <Map<String, Object?>>[];
-    if (start != null) {
-      features.add({
-        'type': 'Feature',
-        'properties': {'kind': 'start'},
-        'geometry': {
-          'type': 'Point',
-          'coordinates': [start.longitude, start.latitude],
-        },
-      });
-    }
-    if (end != null) {
-      features.add({
-        'type': 'Feature',
-        'properties': {'kind': 'end'},
-        'geometry': {
-          'type': 'Point',
-          'coordinates': [end.longitude, end.latitude],
-        },
-      });
-    }
-
-    try {
-      await controller.setGeoJsonSource('route-markers', {
-        'type': 'FeatureCollection',
-        'features': features,
-      });
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.renderRouteMarkers setGeoJsonSource failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
+  void _renderRouteMarkers() {
+    _mapRenderer.render(
+      controller: _mapController,
+      styleLoaded: _styleLoaded,
+      start: _routeStart,
+      end: _routeEnd,
+      selectedVariant: _currentVariant(),
+      weatherSegmentsGeoJson: null, // Markers only update
+    );
   }
 
-  Future<void> _renderSelectedRoute() async {
-    final controller = _mapController;
-    if (controller == null) return;
-    if (!_styleLoaded) return;
-
-    await _ensureRouteLayers();
-
+  void _renderSelectedRoute() {
     final v = _currentVariant();
     if (v == null) return;
-
-    try {
-      await controller.setGeoJsonSource('route-source', {
-        'type': 'FeatureCollection',
-        'features': [
-          {
-            'type': 'Feature',
-            'properties': {},
-            'geometry': {
-              'type': 'LineString',
-              'coordinates': v.shape.map((p) => [p.longitude, p.latitude]).toList(),
-            },
-          },
-        ],
-      });
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.renderSelectedRoute setGeoJsonSource(route-source) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    try {
-      final geo = _routeWeatherProjector.buildSegments(v);
-      await controller.setGeoJsonSource('route-weather-segments', geo);
-
-      final points = v.weatherSamples
-          .map((s) => {
-                'type': 'Feature',
-                'properties': {
-                  'comfort': s.comfortScore,
-                  'confidence': s.confidence,
-                  'windKind': s.relativeWindKind.name,
-                  'windImpact': s.relativeWindImpact,
-                },
-                'geometry': {
-                  'type': 'Point',
-                  'coordinates': [s.location.longitude, s.location.latitude],
-                }
-              })
-          .toList();
-      await controller.setGeoJsonSource('route-weather', {
-        'type': 'FeatureCollection',
-        'features': points,
-      });
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.renderSelectedRoute weather layers failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
+    final geo = _routeWeatherProjector.buildSegments(v);
+    _mapRenderer.render(
+      controller: _mapController,
+      styleLoaded: _styleLoaded,
+      start: _routeStart,
+      end: _routeEnd,
+      selectedVariant: v,
+      weatherSegmentsGeoJson: geo,
+    );
   }
-
-  Future<void> _clearRouteLayers() async {
-    final controller = _mapController;
-    if (controller == null) return;
-    await _ensureRouteLayers();
-    try {
-      await controller.setGeoJsonSource('route-source', _emptyFeatureCollection());
-      await controller.setGeoJsonSource('route-markers', _emptyFeatureCollection());
-      await controller.setGeoJsonSource('route-weather-segments', _emptyFeatureCollection());
-      await controller.setGeoJsonSource('route-weather', _emptyFeatureCollection());
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.clearRouteLayers failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-  }
-
-  Map<String, dynamic> _emptyFeatureCollection() => const {
-        'type': 'FeatureCollection',
-        'features': [],
-      };
 
   String _routeCacheKey(LatLng start, LatLng end) {
-    double round(double v) => (v * 200).roundToDouble() / 200;
+    double round(double v) => (v * CyclingConstants.routeCacheGridFactor).roundToDouble() / CyclingConstants.routeCacheGridFactor;
     return 'v1_${round(start.latitude)}_${round(start.longitude)}__${round(end.latitude)}_${round(end.longitude)}';
   }
 
@@ -694,168 +614,6 @@ class RoutingProvider with ChangeNotifier {
           .toList(),
     };
     await _routeCache.write(key, payload);
-  }
-
-  Future<void> _ensureRouteLayers() async {
-    final controller = _mapController;
-    if (controller == null) return;
-
-    try {
-      await controller.addSource('route-source', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.ensureRouteLayers addSource(route-source) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-    try {
-      await controller.addLineLayer(
-        'route-source',
-        'route-line',
-        const LineLayerProperties(
-          lineColor: '#4A90A0',
-          lineWidth: 5.0,
-          lineOpacity: 0.85,
-          lineJoin: 'round',
-          lineCap: 'round',
-        ),
-      );
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.ensureRouteLayers addLineLayer(route-line) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    try {
-      await controller.addSource('route-weather-segments', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.ensureRouteLayers addSource(route-weather-segments) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-    try {
-      await controller.addLineLayer(
-        'route-weather-segments',
-        'route-weather-segments-layer',
-        const LineLayerProperties(
-          lineWidth: 8.0,
-          lineJoin: 'round',
-          lineCap: 'round',
-          lineColor: [
-            'match',
-            ['get', 'windKind'],
-            'tail',
-            '#88D3A2',
-            'cross',
-            '#FFC56E',
-            'head',
-            '#B55A5A',
-            '#4A90A0',
-          ],
-          lineOpacity: [
-            'interpolate',
-            ['linear'],
-            ['get', 'confidence'],
-            0.25,
-            0.25,
-            0.95,
-            0.92,
-          ],
-        ),
-      );
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.ensureRouteLayers addLineLayer(route-weather-segments-layer) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    try {
-      await controller.addSource('route-markers', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.ensureRouteLayers addSource(route-markers) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-    try {
-      await controller.addCircleLayer(
-        'route-markers',
-        'route-markers-layer',
-        const CircleLayerProperties(
-          circleRadius: 7.5,
-          circleColor: [
-            'case',
-            ['==', ['get', 'kind'], 'start'],
-            '#88D3A2',
-            '#B55A5A',
-          ],
-          circleStrokeColor: '#ffffff',
-          circleStrokeWidth: 2.0,
-        ),
-      );
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.ensureRouteLayers addCircleLayer(route-markers-layer) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-
-    try {
-      await controller.addSource('route-weather', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.ensureRouteLayers addSource(route-weather) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
-    try {
-      await controller.addCircleLayer(
-        'route-weather',
-        'route-weather-layer',
-        const CircleLayerProperties(
-          circleRadius: [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            10,
-            3.0,
-            14,
-            6.0,
-          ],
-          circleColor: [
-            'interpolate',
-            ['linear'],
-            ['get', 'comfort'],
-            1,
-            '#B55A5A',
-            5,
-            '#FFC56E',
-            10,
-            '#88D3A2',
-          ],
-          circleOpacity: [
-            'interpolate',
-            ['linear'],
-            ['get', 'confidence'],
-            0.25,
-            0.25,
-            0.95,
-            0.9,
-          ],
-          circleBlur: 0.15,
-          circleStrokeColor: '#ffffff',
-          circleStrokeWidth: 1.2,
-        ),
-      );
-    } catch (e, st) {
-      assert(() {
-        AppLog.w('routing.ensureRouteLayers addCircleLayer(route-weather-layer) failed', error: e, stackTrace: st);
-        return true;
-      }());
-    }
   }
 
   @override

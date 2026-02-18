@@ -1,7 +1,8 @@
 import 'dart:math';
 
-import 'package:app/services/weather_engine_sota.dart';
-import 'package:app/services/weather_models.dart';
+import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/weather_engine_sota.dart';
+import 'package:horizon/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 class RouteWeatherProjector {
@@ -72,14 +73,6 @@ class RouteWeatherProjector {
     return out;
   }
 
-  double _polylineLengthMeters(List<LatLng> input) {
-    double len = 0.0;
-    for (int i = 1; i < input.length; i++) {
-      len += _haversineMeters(input[i - 1], input[i]);
-    }
-    return len;
-  }
-
   List<LatLng> _resamplePolyline(List<LatLng> input, double everyMeters) {
     final out = <LatLng>[];
     out.add(input.first);
@@ -88,7 +81,7 @@ class RouteWeatherProjector {
     for (int i = 1; i < input.length; i++) {
       final a = input[i - 1];
       final b = input[i];
-      final segLen = _haversineMeters(a, b);
+      final segLen = haversineMeters(a, b);
       if (segLen <= 0) continue;
 
       var dist = carry;
@@ -101,7 +94,8 @@ class RouteWeatherProjector {
       if (carry < 0) carry = 0;
     }
 
-    if (out.last.latitude != input.last.latitude || out.last.longitude != input.last.longitude) {
+    if (out.last.latitude != input.last.latitude ||
+        out.last.longitude != input.last.longitude) {
       out.add(input.last);
     }
     return out;
@@ -112,19 +106,6 @@ class RouteWeatherProjector {
       a.latitude + (b.latitude - a.latitude) * t,
       a.longitude + (b.longitude - a.longitude) * t,
     );
-  }
-
-  double _haversineMeters(LatLng a, LatLng b) {
-    const r = 6371000.0;
-    final dLat = _deg2rad(b.latitude - a.latitude);
-    final dLon = _deg2rad(b.longitude - a.longitude);
-    final lat1 = _deg2rad(a.latitude);
-    final lat2 = _deg2rad(b.latitude);
-
-    final sinDLat = sin(dLat / 2);
-    final sinDLon = sin(dLon / 2);
-    final h = sinDLat * sinDLat + cos(lat1) * cos(lat2) * sinDLon * sinDLon;
-    return 2 * r * asin(min(1.0, sqrt(h)));
   }
 
   double _bearingDegrees(LatLng a, LatLng b) {
@@ -151,6 +132,36 @@ class RouteWeatherProjector {
     if (headwindness <= -0.35) return RelativeWindKind.tail;
     if (headwindness >= 0.35) return RelativeWindKind.head;
     return RelativeWindKind.cross;
+  }
+
+  Map<String, dynamic> buildSegments(RouteVariant v) {
+    final features = <Map<String, Object?>>[];
+    final samples = v.weatherSamples;
+
+    for (int i = 0; i + 1 < samples.length; i++) {
+      final a = samples[i];
+      final b = samples[i + 1];
+      features.add({
+        'type': 'Feature',
+        'properties': {
+          'windKind': a.relativeWindKind.name,
+          'confidence': a.confidence,
+          'comfort': a.comfortScore,
+        },
+        'geometry': {
+          'type': 'LineString',
+          'coordinates': [
+            [a.location.longitude, a.location.latitude],
+            [b.location.longitude, b.location.latitude],
+          ],
+        },
+      });
+    }
+
+    return {
+      'type': 'FeatureCollection',
+      'features': features,
+    };
   }
 
   double _deg2rad(double d) => d * pi / 180.0;

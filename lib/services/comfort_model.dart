@@ -1,7 +1,6 @@
-import 'dart:math';
-
-import 'package:app/services/comfort_profile.dart';
-import 'package:app/services/weather_models.dart';
+import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/services/comfort_profile.dart';
+import 'package:horizon/services/weather_models.dart';
 
 enum ComfortContributionKind {
   rain,
@@ -88,13 +87,13 @@ class ComfortModel {
 
     final r = s.precipitation;
     double rainPenalty;
-    if (r <= 0.1) {
+    if (r <= CyclingConstants.rainLight) {
       rainPenalty = 0.0;
-    } else if (r <= 0.5) {
+    } else if (r <= CyclingConstants.rainModerate) {
       rainPenalty = 1.5;
-    } else if (r <= 1.5) {
+    } else if (r <= CyclingConstants.rainHeavy) {
       rainPenalty = 3.5;
-    } else if (r <= 4.0) {
+    } else if (r <= CyclingConstants.rainExtreme) {
       rainPenalty = 6.0;
     } else {
       rainPenalty = 8.0;
@@ -106,7 +105,7 @@ class ComfortModel {
     }
 
     final t = s.apparentTemperature.isFinite ? s.apparentTemperature : s.temperature;
-    final dt = (t - 18.0).abs();
+    final dt = (t - CyclingConstants.comfortBaseTemperature).abs();
     var tempPenalty = min(5.0, pow(dt / 6.0, 1.3).toDouble());
     tempPenalty *= profile.weightTemperature;
     penalty += tempPenalty;
@@ -125,7 +124,7 @@ class ComfortModel {
 
     var headPenalty = 0.0;
     if (headwindness > 0) {
-      headPenalty = min(6.0, (w / 8.0) * (1.0 + 0.8 * headwindness));
+      headPenalty = min(6.0, (w / CyclingConstants.windModerate) * (1.0 + 0.8 * headwindness));
     }
     headPenalty *= profile.weightHeadwind;
     penalty += headPenalty;
@@ -140,7 +139,7 @@ class ComfortModel {
       contributions.add(ComfortContribution(kind: ComfortContributionKind.crosswind, label: 'Vent latéral', delta: -crossPenalty));
     }
 
-    if (t >= 22.0 && s.humidity.isFinite) {
+    if (t >= CyclingConstants.heatHumidityThreshold && s.humidity.isFinite) {
       var humPenalty = min(1.5, (s.humidity - 60.0).clamp(0.0, 40.0) / 30.0);
       humPenalty *= profile.weightHumidity;
       penalty += humPenalty;
@@ -150,7 +149,7 @@ class ComfortModel {
     }
 
     final hour = atUtc.toLocal().hour;
-    final isNight = hour <= 6 || hour >= 22;
+    final isNight = hour <= CyclingConstants.nightEndHour || hour >= CyclingConstants.nightStartHour;
     if (isNight) {
       final nightPenalty = 0.9 * profile.weightNight;
       penalty += nightPenalty;

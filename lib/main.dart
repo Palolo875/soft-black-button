@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:app/providers/map_provider.dart';
-import 'package:app/services/theme_settings_store.dart';
-import 'package:app/ui/horizon_theme.dart';
+import 'package:horizon/providers/map_provider.dart';
+import 'package:horizon/services/theme_settings_store.dart';
+import 'package:horizon/ui/horizon_theme.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:app/features/map/presentation/map_screen.dart';
-import 'package:app/core/di/app_dependencies.dart';
-import 'package:app/providers/app_settings_provider.dart';
-import 'package:app/providers/connectivity_provider.dart';
-import 'package:app/providers/location_provider.dart';
-import 'package:app/providers/weather_provider.dart';
-import 'package:app/providers/routing_provider.dart';
-import 'package:app/providers/offline_provider.dart';
+import 'package:horizon/features/map/presentation/map_screen.dart';
+import 'package:horizon/core/di/app_dependencies.dart';
+import 'package:horizon/providers/app_settings_provider.dart';
+import 'package:horizon/providers/connectivity_provider.dart';
+import 'package:horizon/providers/location_provider.dart';
+import 'package:horizon/providers/weather_provider.dart';
+import 'package:horizon/providers/routing_provider.dart';
+import 'package:horizon/providers/offline_provider.dart';
 
 void main() {
   final deps = AppDependencies.create();

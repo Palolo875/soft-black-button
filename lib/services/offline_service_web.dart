@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:app/services/offline_registry.dart';
+import 'package:horizon/services/offline_registry.dart';
 
 class OfflineService {
   Future<List<OfflinePack>> listOfflinePacks() async {

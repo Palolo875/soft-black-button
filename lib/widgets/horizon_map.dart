@@ -7,11 +7,11 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
-import 'package:app/providers/map_provider.dart';
-import 'package:app/providers/location_provider.dart';
-import 'package:app/providers/weather_provider.dart';
-import 'package:app/providers/routing_provider.dart';
-import 'package:app/core/log/app_log.dart';
+import 'package:horizon/providers/map_provider.dart';
+import 'package:horizon/providers/location_provider.dart';
+import 'package:horizon/providers/weather_provider.dart';
+import 'package:horizon/providers/routing_provider.dart';
+import 'package:horizon/core/log/app_log.dart';
 
 class HorizonMap extends StatefulWidget {
   final void Function(MaplibreMapController)? onMapCreated;

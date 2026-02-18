@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/ui/horizon_card.dart';
-import 'package:app/ui/horizon_theme.dart';
+import 'package:horizon/ui/horizon_card.dart';
+import 'package:horizon/ui/horizon_theme.dart';
 
 void main() {
   testWidgets('HorizonCard renders child', (tester) async {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:app/services/secure_http_client.dart';
+import 'package:horizon/services/secure_http_client.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 

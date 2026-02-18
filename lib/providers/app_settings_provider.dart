@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:app/services/analytics_service.dart';
-import 'package:app/services/notification_service.dart';
-import 'package:app/services/notification_settings_store.dart';
-import 'package:app/services/perf_metrics.dart';
-import 'package:app/services/theme_settings_store.dart';
+import 'package:horizon/services/analytics_service.dart';
+import 'package:horizon/services/notification_service.dart';
+import 'package:horizon/services/notification_settings_store.dart';
+import 'package:horizon/services/perf_metrics.dart';
+import 'package:horizon/services/theme_settings_store.dart';
 
 class AppSettingsProvider with ChangeNotifier {
   final AnalyticsService _analytics;

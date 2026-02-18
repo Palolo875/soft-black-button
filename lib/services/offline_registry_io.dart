@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:app/core/log/app_log.dart';
+import 'package:horizon/core/log/app_log.dart';
 import 'package:path_provider/path_provider.dart';
 
 enum OfflinePackType { pmtiles, valhallaTiles, elevation, cache }
