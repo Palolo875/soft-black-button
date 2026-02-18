@@ -11,6 +11,8 @@ import 'package:app/providers/connectivity_provider.dart';
 import 'package:app/providers/location_provider.dart';
 import 'package:app/providers/weather_provider.dart';
 import 'package:app/providers/routing_provider.dart';
+import 'package:app/providers/offline_provider.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   final deps = AppDependencies.create();
@@ -60,6 +62,11 @@ class HorizonApp extends StatelessWidget {
           ),
         ),
         ChangeNotifierProvider(
+          create: (_) => OfflineProvider(
+            offlineService: deps.offlineService,
+          ),
+        ),
+        ChangeNotifierProvider(
           create: (_) => AppSettingsProvider(
             analytics: deps.analytics,
             metrics: deps.metrics,
@@ -68,21 +75,22 @@ class HorizonApp extends StatelessWidget {
             themeStore: deps.themeStore,
           ),
         ),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<RoutingProvider, MapProvider>(
           create: (_) => MapProvider(
-            routingEngine: deps.routingEngine,
-            routeCache: deps.routeCache,
-            offlineService: deps.offlineService,
             privacyService: deps.privacyService,
             analytics: deps.analytics,
-            scheduler: deps.scheduler,
             metrics: deps.metrics,
-            routeCompare: deps.routeCompare,
-            gpxImport: deps.gpxImport,
-            routeWeatherProjector: deps.routeWeatherProjector,
-            notifications: deps.notifications,
-            explainability: deps.explainability,
           ),
+          update: (_, routing, map) {
+            map?.attachRouting(routing);
+            return map!;
+          },
+        ),
+        ProxyProvider2<MapProvider, OfflineProvider, MapProvider>(
+          update: (_, map, offline, __) {
+            map.attachOffline(offline);
+            return map;
+          },
         ),
       ],
       child: Consumer<AppSettingsProvider>(

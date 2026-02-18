@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:app/services/analytics_service.dart';
 import 'package:app/services/horizon_scheduler.dart';
 import 'package:app/services/perf_metrics.dart';
@@ -149,7 +151,10 @@ class WeatherProvider with ChangeNotifier {
       _metrics.inc('weather_refresh');
       unawaited(_metrics.flush());
       unawaited(_analytics.record('weather_refreshed', props: {'trigger': userInitiated ? 'user' : 'auto'}));
-    } catch (e) {
+    } catch (e, st) {
+      AppLog.e('weather.refreshWeather failed', error: e, stackTrace: st, props: {
+        'userInitiated': userInitiated,
+      });
       _weatherLoading = false;
       _weatherError = e.toString();
       notifyListeners();

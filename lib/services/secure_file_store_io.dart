@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:app/services/local_crypto.dart';
 import 'package:app/services/secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
@@ -69,7 +70,8 @@ class SecureFileStore {
       final decoded = json.decode(utf8.decode(clear));
       if (decoded is! Map) return null;
       return Map<String, dynamic>.from(decoded as Map);
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('secureFileStore.readJsonDecrypted failed', error: e, stackTrace: st, props: {'name': name});
       return null;
     }
   }
@@ -98,7 +100,9 @@ class SecureFileStore {
       if (e is File) {
         try {
           total += await e.length();
-        } catch (_) {}
+        } catch (err, st) {
+          AppLog.w('secureFileStore.approxSizeBytes failed', error: err, stackTrace: st, props: {'path': e.path});
+        }
       }
     }
     return total;

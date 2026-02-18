@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:app/services/secure_file_store.dart';
+import 'package:app/core/log/app_log.dart';
 
 class WeatherCacheEntry {
   final DateTime fetchedAt;
@@ -79,7 +80,8 @@ class WeatherCache {
       final age = DateTime.now().difference(entry.fetchedAt);
       if (age > ttl) return null;
       return entry;
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('weatherCache.read failed', error: e, stackTrace: st, props: {'key': key, 'encrypted': false});
       return null;
     }
   }

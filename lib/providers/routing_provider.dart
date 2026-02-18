@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:app/services/analytics_service.dart';
 import 'package:app/services/explainability_engine.dart';
 import 'package:app/services/gpx_import_service.dart';
@@ -279,7 +280,8 @@ class RoutingProvider with ChangeNotifier {
 
       await _saveRouteCache(start, end, variants);
       await _afterVariantsUpdated();
-    } catch (e) {
+    } catch (e, st) {
+      AppLog.e('routing.computeRouteVariants failed', error: e, stackTrace: st);
       final cached = await _loadRouteCache(start, end);
       if (cached != null) {
         _routeVariants = cached;
@@ -360,7 +362,8 @@ class RoutingProvider with ChangeNotifier {
       unawaited(_renderRouteMarkers());
       await _renderSelectedRoute();
       unawaited(_evaluateAndNotifyContextual());
-    } catch (e) {
+    } catch (e, st) {
+      AppLog.e('routing.importGpxRoute failed', error: e, stackTrace: st);
       _gpxImportLoading = false;
       _gpxImportError = e.toString();
       notifyListeners();

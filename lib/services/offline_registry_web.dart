@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'dart:html' as html;
 
+import 'package:app/core/log/app_log.dart';
+
 enum OfflinePackType { pmtiles, valhallaTiles, elevation, cache }
 
 class OfflinePack {
@@ -110,7 +112,8 @@ class OfflineRegistry {
         if (pack != null) packs.add(pack);
       }
       return packs;
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('offlineRegistry.web.listPacks failed', error: e, stackTrace: st);
       return const [];
     }
   }

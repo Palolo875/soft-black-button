@@ -12,6 +12,7 @@ import 'package:app/providers/connectivity_provider.dart';
 import 'package:app/providers/location_provider.dart';
 import 'package:app/providers/weather_provider.dart';
 import 'package:app/providers/routing_provider.dart';
+import 'package:app/providers/offline_provider.dart';
 import 'package:app/services/analytics_service.dart';
 import 'package:app/services/route_compare_service.dart';
 import 'package:app/services/routing_models.dart';
@@ -188,6 +189,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final settings = Provider.of<AppSettingsProvider>(context);
     final weather = Provider.of<WeatherProvider>(context);
     final routing = Provider.of<RoutingProvider>(context);
+    final offline = Provider.of<OfflineProvider>(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final onSurfaceStrong = scheme.onSurface.withOpacity(0.88);
@@ -207,6 +209,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               mapProvider.setController(controller);
               weather.setController(controller);
               routing.setController(controller);
+              offline.setController(controller);
             },
           ),
           if (!mapProvider.isStyleLoaded)
@@ -1286,17 +1289,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           onPressed: kIsWeb
                               ? null
                               : () {
-                                  if (mapProvider.pmtilesEnabled) {
-                                    mapProvider.disablePmtilesPack();
+                                  if (offline.pmtilesEnabled) {
+                                    offline.disablePmtilesPack();
                                   } else {
-                                    mapProvider.enablePmtilesPack(
+                                    offline.enablePmtilesPack(
                                       url: 'https://r2-public.protomaps.com/protomaps-sample-datasets/cb_2018_us_zcta510_500k.pmtiles',
                                       fileName: 'horizon.pmtiles',
                                       regionNameForUi: 'Pack offline',
                                     );
                                   }
                                 },
-                          onLongPress: (!kIsWeb && mapProvider.pmtilesEnabled)
+                          onLongPress: (!kIsWeb && offline.pmtilesEnabled)
                               ? () async {
                                   final ok = await showDialog<bool>(
                                     context: context,
@@ -1318,21 +1321,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     },
                                   );
                                   if (ok == true) {
-                                    await mapProvider.uninstallCurrentPmtilesPack();
+                                    await offline.uninstallCurrentPmtilesPack();
                                   }
                                 }
                               : null,
                           child: Tooltip(
                             message: kIsWeb
                                 ? 'Pack offline indisponible sur Web'
-                                : (mapProvider.pmtilesEnabled ? 'Désactiver le pack offline' : 'Activer le pack offline'),
+                                : (offline.pmtilesEnabled ? 'Désactiver le pack offline' : 'Activer le pack offline'),
                             child: Semantics(
                               button: true,
                               label: kIsWeb
                                   ? 'Pack offline indisponible sur Web'
-                                  : (mapProvider.pmtilesEnabled ? 'Désactiver le pack offline' : 'Activer le pack offline'),
+                                  : (offline.pmtilesEnabled ? 'Désactiver le pack offline' : 'Activer le pack offline'),
                               child: Icon(
-                                mapProvider.pmtilesEnabled ? Icons.storage_rounded : Icons.storage_outlined,
+                                offline.pmtilesEnabled ? Icons.storage_rounded : Icons.storage_outlined,
                                 color: onSurfaceStrong,
                               ),
                             ),
@@ -1349,12 +1352,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           onPressed: kIsWeb
                               ? null
                               : () {
-                                  mapProvider.downloadVisibleRegion(regionName: 'Visible region');
+                                  offline.downloadVisibleRegion(regionName: 'Visible region');
                                 },
                           onLongPress: kIsWeb
                               ? null
                               : () async {
-                                  final packs = await mapProvider.listOfflinePacks();
+                                  final packs = await offline.listOfflinePacks();
                                   if (!context.mounted) return;
 
                                   await showModalBottomSheet<void>(
@@ -1435,7 +1438,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                                               },
                                                             );
                                                             if (ok == true) {
-                                                              await mapProvider.uninstallOfflinePackById(p.id);
+                                                              await offline.uninstallOfflinePackById(p.id);
                                                               if (ctx.mounted) Navigator.of(ctx).pop();
                                                             }
                                                           },
@@ -1604,10 +1607,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ],
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: (mapProvider.offlineDownloadProgress == null &&
-              mapProvider.offlineDownloadError == null &&
-              mapProvider.pmtilesProgress == null &&
-              mapProvider.pmtilesError == null)
+      floatingActionButton: (offline.offlineDownloadProgress == null &&
+              offline.offlineDownloadError == null &&
+              offline.pmtilesProgress == null &&
+              offline.pmtilesError == null)
           ? null
           : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1626,16 +1629,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           const Icon(Icons.offline_pin_outlined, size: 18),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: mapProvider.pmtilesError != null
+                            child: offline.pmtilesError != null
                                 ? Text(
-                                    mapProvider.pmtilesError!,
+                                    offline.pmtilesError!,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
                                   )
-                                : mapProvider.offlineDownloadError != null
+                                : offline.offlineDownloadError != null
                                     ? Text(
-                                        mapProvider.offlineDownloadError!,
+                                        offline.offlineDownloadError!,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
@@ -1644,12 +1647,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
-                                            mapProvider.pmtilesProgress != null ? 'Activation pack offline…' : 'Téléchargement offline…',
+                                            offline.pmtilesProgress != null ? 'Activation pack offline…' : 'Téléchargement offline…',
                                             style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
                                           ),
                                           const SizedBox(height: 6),
                                           LinearProgressIndicator(
-                                            value: mapProvider.pmtilesProgress ?? mapProvider.offlineDownloadProgress,
+                                            value: offline.pmtilesProgress ?? offline.offlineDownloadProgress,
                                             minHeight: 3,
                                             color: scheme.primary,
                                             backgroundColor: scheme.primary.withOpacity(0.18),
@@ -1660,19 +1663,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           const SizedBox(width: 10),
                           IconButton(
                             onPressed: () {
-                              mapProvider.clearOfflineDownloadState();
-                              mapProvider.clearPmtilesState();
+                              offline.clearOfflineDownloadState();
+                              offline.clearPmtilesState();
                             },
                             icon: Tooltip(
                               message: 'Fermer',
-                              child: Semantics(
-                                button: true,
-                                label: 'Fermer l’état de téléchargement offline',
-                                child: const Icon(Icons.close, size: 18),
-                              ),
+                              child: Icon(Icons.close_rounded, color: scheme.onSurface.withOpacity(0.82), size: 18),
                             ),
-                            visualDensity: VisualDensity.compact,
+                            label: 'Fermer l’état de téléchargement offline',
+                            child: const Icon(Icons.close, size: 18),
                           ),
+                          visualDensity: VisualDensity.compact,
                         ],
                       ),
                     ),

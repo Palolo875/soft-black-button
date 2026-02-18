@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStorage {
@@ -15,7 +16,8 @@ class SecureStorage {
     if (b64 == null || b64.isEmpty) return null;
     try {
       return Uint8List.fromList(_decodeBase64(b64));
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('secureStorage.readMasterKey invalid base64', error: e, stackTrace: st);
       return null;
     }
   }

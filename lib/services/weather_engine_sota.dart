@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:app/services/metno_adapter.dart';
 import 'package:app/services/open_meteo_adapter.dart';
 import 'package:app/services/comfort_model.dart';
@@ -97,7 +98,8 @@ class WeatherEngineSota {
         longitude: p.longitude,
         forecastDays: 3,
       );
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('weatherEngine.openMeteo failed, falling back to met.no', error: e, stackTrace: st);
       // Met.no requires a descriptive User-Agent with contact info.
       final metPayload = await _metNo.fetchCompact(
         latitude: p.latitude,

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:app/services/offline_registry.dart';
 
 class OfflineLru {
@@ -24,7 +25,9 @@ class OfflineLru {
         if (await file.exists()) {
           await file.delete();
         }
-      } catch (_) {}
+      } catch (e, st) {
+        AppLog.w('offlineLru.delete failed', error: e, stackTrace: st, props: {'id': p.id, 'path': p.path});
+      }
 
       total -= p.sizeBytes;
       final remaining = packs.where((x) => x.id != p.id).toList();

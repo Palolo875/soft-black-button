@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:path_provider/path_provider.dart';
 
 enum OfflinePackType { pmtiles, valhallaTiles, elevation, cache }
@@ -127,7 +128,8 @@ class OfflineRegistry {
         if (pack != null) packs.add(pack);
       }
       return packs;
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('offlineRegistry.io.listPacks failed', error: e, stackTrace: st);
       return const [];
     }
   }

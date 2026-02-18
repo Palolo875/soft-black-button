@@ -9,6 +9,7 @@ import 'package:pmtiles/pmtiles.dart' as pm;
 import 'package:app/services/offline_core.dart';
 import 'package:app/services/offline_registry.dart';
 import 'package:app/services/secure_http_client.dart';
+import 'package:app/core/log/app_log.dart';
 
 class OfflineService {
   HttpServer? _pmtilesServer;
@@ -54,7 +55,9 @@ class OfflineService {
       if (_pmtilesServer != null) {
         await stopPmtilesServer();
       }
-    } catch (_) {}
+    } catch (e, st) {
+      AppLog.w('offline.uninstallPmtilesPack stopPmtilesServer failed', error: e, stackTrace: st);
+    }
 
     await _offlineCore.uninstallPackById('pmtiles:$fileName');
   }
@@ -138,7 +141,8 @@ class OfflineService {
           request.response.statusCode = HttpStatus.notFound;
           await request.response.close();
           continue;
-        } catch (_) {
+        } catch (e, st) {
+          AppLog.w('offline.pmtilesServer request failed', error: e, stackTrace: st, props: {'path': request.uri.path});
           request.response.statusCode = HttpStatus.noContent;
           await request.response.close();
         }
@@ -242,7 +246,8 @@ class OfflineService {
       request.response.headers.set('Access-Control-Allow-Origin', '*');
       request.response.add(response.bodyBytes);
       await request.response.close();
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('offline.proxyCached failed', error: e, stackTrace: st, props: {'remote': remoteUri.toString()});
       request.response.statusCode = HttpStatus.notFound;
       await request.response.close();
     }
@@ -287,7 +292,8 @@ class OfflineService {
         if (!controller.isClosed) {
           await controller.close();
         }
-      } catch (e) {
+      } catch (e, st) {
+        AppLog.e('offline.downloadRegion failed', error: e, stackTrace: st, props: {'regionName': regionName});
         if (!controller.isClosed) {
           controller.add(
             Error(

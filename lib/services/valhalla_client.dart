@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:app/services/secure_http_client.dart';
+import 'package:app/core/log/app_log.dart';
 import 'package:http/http.dart' as http;
 
 class ValhallaRouteResult {
@@ -39,7 +40,9 @@ class ValhallaClient {
       try {
         final bytes = base64.decode(p);
         out.add(utf8.decode(bytes));
-      } catch (_) {}
+      } catch (e, st) {
+        AppLog.w('valhalla.tlsPins decode failed', error: e, stackTrace: st);
+      }
     }
     return out;
   }
@@ -94,7 +97,8 @@ class ValhallaClient {
           pinnedServerCertificatesPem: _pinsPem,
         ),
       );
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('valhalla.post failed, falling back to GET', error: e, stackTrace: st);
       final getUri = base.replace(
         path: routePath,
         queryParameters: {

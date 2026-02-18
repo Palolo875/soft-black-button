@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:app/services/offline_downloader.dart';
 import 'package:app/services/offline_integrity.dart';
 import 'package:app/services/offline_lru.dart';
@@ -79,7 +80,9 @@ class OfflineCore {
           await dir.delete(recursive: true);
         }
       }
-    } catch (_) {}
+    } catch (e, st) {
+      AppLog.w('offlineCore.uninstallPackById delete failed', error: e, stackTrace: st, props: {'id': id, 'path': pack.path});
+    }
 
     await registry.remove(id);
   }

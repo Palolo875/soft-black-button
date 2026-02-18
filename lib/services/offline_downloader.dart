@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:app/services/offline_integrity.dart';
 import 'package:http/http.dart' as http;
 import 'package:app/services/secure_http_client.dart';
+import 'package:app/core/log/app_log.dart';
 
 class OfflineDownloader {
   final OfflineIntegrity _integrity;
@@ -73,7 +74,9 @@ class OfflineDownloader {
         if (await bak.exists()) {
           await bak.rename(destination.path);
         }
-      } catch (_) {}
+      } catch (err, st) {
+        AppLog.w('offlineDownloader.rollback failed', error: err, stackTrace: st, props: {'path': destination.path});
+      }
       rethrow;
     }
     return destination;

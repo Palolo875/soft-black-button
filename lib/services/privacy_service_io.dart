@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:app/core/log/app_log.dart';
 import 'package:app/services/offline_registry.dart';
 import 'package:app/services/secure_file_store.dart';
 import 'package:path_provider/path_provider.dart';
@@ -69,7 +70,9 @@ class PrivacyService {
       if (e is File) {
         try {
           total += await e.length();
-        } catch (_) {}
+        } catch (err, st) {
+          AppLog.w('privacy.dirSize file.length failed', error: err, stackTrace: st, props: {'path': e.path});
+        }
       }
     }
     return total;
@@ -80,6 +83,8 @@ class PrivacyService {
       if (await dir.exists()) {
         await dir.delete(recursive: true);
       }
-    } catch (_) {}
+    } catch (e, st) {
+      AppLog.w('privacy.deleteDir failed', error: e, stackTrace: st, props: {'path': dir.path});
+    }
   }
 }

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'dart:html' as html;
 
+import 'package:app/core/log/app_log.dart';
+
 class SecureFileStore {
   static const _prefix = 'horizon_secure_store_v1:';
 
@@ -20,7 +22,8 @@ class SecureFileStore {
       final decoded = json.decode(raw);
       if (decoded is! Map) return null;
       return Map<String, dynamic>.from(decoded as Map);
-    } catch (_) {
+    } catch (e, st) {
+      AppLog.w('secureFileStore.web.readJsonDecrypted failed', error: e, stackTrace: st, props: {'name': name});
       return null;
     }
   }

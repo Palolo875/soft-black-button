@@ -11,6 +11,7 @@ import 'package:app/providers/map_provider.dart';
 import 'package:app/providers/location_provider.dart';
 import 'package:app/providers/weather_provider.dart';
 import 'package:app/providers/routing_provider.dart';
+import 'package:app/core/log/app_log.dart';
 
 class HorizonMap extends StatefulWidget {
   final void Function(MaplibreMapController)? onMapCreated;
@@ -176,7 +177,7 @@ class _HorizonMapState extends State<HorizonMap> {
           compassEnabled: true,
           trackCameraPosition: true,
           onStyleLoadedCallback: () {
-            debugPrint("Style loaded successfully");
+            AppLog.d('map.style.loaded');
             Provider.of<MapProvider>(context, listen: false).setStyleLoaded(true);
             Provider.of<WeatherProvider>(context, listen: false).setStyleLoaded(true);
             Provider.of<RoutingProvider>(context, listen: false).setStyleLoaded(true);
