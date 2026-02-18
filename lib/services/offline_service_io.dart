@@ -30,9 +30,6 @@ class OfflineService {
   }
 
   Future<String> downloadPMTiles(String url, String fileName) async {
-    if (kIsWeb) {
-      return url;
-    }
     final root = await _offlineCore.registry.rootDir();
     final filePath = '${root.path}/$fileName';
     final file = File(filePath);
@@ -53,8 +50,6 @@ class OfflineService {
   Future<void> uninstallPmtilesPack({
     required String fileName,
   }) async {
-    if (kIsWeb) return;
-
     try {
       if (_pmtilesServer != null) {
         await stopPmtilesServer();
@@ -68,8 +63,6 @@ class OfflineService {
     required String pmtilesFilePath,
     String tilesPathPrefix = '/tiles',
   }) async {
-    if (kIsWeb) return null;
-
     final fileName = pmtilesFilePath.split(Platform.pathSeparator).last;
     unawaited(_offlineCore.registry.touch('pmtiles:$fileName'));
 
@@ -156,8 +149,6 @@ class OfflineService {
   }
 
   Future<void> stopPmtilesServer() async {
-    if (kIsWeb) return;
-
     final server = _pmtilesServer;
     _pmtilesServer = null;
 

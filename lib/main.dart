@@ -9,6 +9,11 @@ import 'package:app/services/routing_models.dart';
 import 'package:app/services/analytics_service.dart';
 import 'package:app/services/route_compare_service.dart';
 import 'package:app/widgets/horizon_map.dart';
+import 'package:app/ui/horizon_theme.dart';
+import 'package:app/ui/horizon_card.dart';
+import 'package:app/ui/horizon_chip.dart';
+import 'package:app/ui/horizon_bottom_sheet.dart';
+import 'package:app/ui/horizon_breakpoints.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() {
@@ -40,30 +45,10 @@ class _RouteChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return HorizonChip(
+      label: label,
+      selected: selected,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF4A90A0).withOpacity(0.16) : Colors.white.withOpacity(0.0),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected ? const Color(0xFF4A90A0).withOpacity(0.45) : Colors.black.withOpacity(0.10),
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: selected ? const Color(0xFF2E2E2E) : Colors.black54,
-            letterSpacing: -0.2,
-          ),
-        ),
-      ),
     );
   }
 }
@@ -73,9 +58,6 @@ class HorizonApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFFABC9D3);
-    const radius = 22.0;
-
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => MapProvider()),
@@ -83,39 +65,9 @@ class HorizonApp extends StatelessWidget {
       child: MaterialApp(
       title: 'Horizon',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        fontFamily: 'Inter',
-        colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.light),
-        scaffoldBackgroundColor: const Color(0xFFF6F7F8),
-        cardTheme: CardTheme(
-          color: Colors.white.withOpacity(0.9),
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white.withOpacity(0.92),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radius),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radius),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radius),
-            borderSide: BorderSide(color: seed.withOpacity(0.35), width: 1),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
-        floatingActionButtonTheme: FloatingActionButtonThemeData(
-          elevation: 1.5,
-          backgroundColor: Colors.white.withOpacity(0.92),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-        ),
-      ),
+      theme: HorizonTheme.light(),
+      darkTheme: HorizonTheme.dark(),
+      themeMode: ThemeMode.system,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -192,6 +144,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final mapProvider = Provider.of<MapProvider>(context);
+    final w = MediaQuery.sizeOf(context).width;
+    final edgeInset = w >= HorizonBreakpoints.medium
+        ? HorizonTokens.space32
+        : (w >= HorizonBreakpoints.compact ? HorizonTokens.space24 : HorizonTokens.space20);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -211,8 +167,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           // Header: Pilule météo / état
           Positioned(
             top: 60,
-            left: 0,
-            right: 0,
+            left: edgeInset,
+            right: edgeInset,
             child: Center(
               child: Hero(
                 tag: 'status-pill',
@@ -229,6 +185,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             context: context,
                             showDragHandle: true,
                             builder: (ctx) {
+                              final theme = Theme.of(ctx);
+                              final muted = theme.colorScheme.onSurface.withOpacity(0.60);
                               return SafeArea(
                                 child: Padding(
                                   padding: const EdgeInsets.all(16),
@@ -273,9 +231,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                       const SizedBox(height: 8),
                                       Text('Total : ${_formatBytes(report.totalBytes)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                                       const SizedBox(height: 14),
-                                      const Text(
+                                      Text(
                                         'HORIZON fonctionne sans compte. Les données restent sur l’appareil.\nLong-press ici pour gérer/effacer rapidement.',
-                                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                                        style: TextStyle(fontSize: 12, color: muted),
                                       ),
                                       const SizedBox(height: 14),
                                       Row(
@@ -385,133 +343,268 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                       ),
                                     ],
                                   ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(_glassRadius),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                              decoration: _glassDecoration(),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF88D3A2),
-                                      shape: BoxShape.circle,
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Icon(
-                                    mapProvider.weatherError != null
-                                        ? Icons.cloud_off_rounded
-                                        : (mapProvider.weatherLoading ? Icons.cloud_sync_rounded : Icons.wb_sunny_rounded),
-                                    size: 18,
-                                    color: mapProvider.weatherError != null
-                                        ? const Color(0xFFB55A5A)
-                                        : (mapProvider.weatherLoading ? const Color(0xFF4A90A0) : const Color(0xFFFFC56E)),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    mapProvider.weatherError != null
-                                        ? 'Météo indisponible'
-                                        : (mapProvider.weatherDecision == null
-                                            ? 'Météo…'
-                                            : '${mapProvider.weatherDecision!.now.temperature.round()}°C  •  confort ${mapProvider.weatherDecision!.comfortScore.toStringAsFixed(1)}/10  •  conf ${(mapProvider.weatherDecision!.confidence * 100).round()}%'),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: -0.2,
-                                      color: Colors.black87,
+                                    Row(
+                                      children: [
+                                        const Expanded(child: Text('Analytics anonymes (opt-in)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                        Switch(
+                                          value: mapProvider.analyticsSettings.level == AnalyticsLevel.anonymous,
+                                          onChanged: (v) => mapProvider.setAnalyticsLevel(v ? AnalyticsLevel.anonymous : AnalyticsLevel.off),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  if (mapProvider.isOnline == false) ...[
-                                    const SizedBox(width: 8),
+                                    Row(
+                                      children: [
+                                        const Expanded(child: Text('Notifications (opt-in)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                        Switch(
+                                          value: mapProvider.notificationsEnabled,
+                                          onChanged: (v) => mapProvider.setNotificationsEnabled(v),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text('Stockage sécurisé : ${_formatBytes(report.secureStoreBytes)}', style: const TextStyle(fontSize: 12)),
+                                    Text('Cache itinéraires (legacy) : ${_formatBytes(report.routeCacheBytes)}', style: const TextStyle(fontSize: 12)),
+                                    Text('Cache météo (legacy) : ${_formatBytes(report.weatherCacheBytes)}', style: const TextStyle(fontSize: 12)),
+                                    Text('Packs offline : ${_formatBytes(report.offlinePacksBytes)}', style: const TextStyle(fontSize: 12)),
+                                    const SizedBox(height: 8),
+                                    Text('Total : ${_formatBytes(report.totalBytes)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                    const SizedBox(height: 14),
                                     Text(
-                                      'Offline',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.black.withOpacity(0.55),
-                                      ),
+                                      'HORIZON fonctionne sans compte. Les données restent sur l’appareil.\nLong-press ici pour gérer/effacer rapidement.',
+                                      style: TextStyle(fontSize: 12, color: muted),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () async {
+                                              final json = await mapProvider.exportPerfMetricsJson();
+                                              if (!ctx.mounted) return;
+                                              await showDialog<void>(
+                                                context: ctx,
+                                                builder: (dctx) {
+                                                  return AlertDialog(
+                                                    title: const Text('Rapport perf (local)'),
+                                                    content: SizedBox(
+                                                      width: double.maxFinite,
+                                                      child: SingleChildScrollView(
+                                                        child: SelectableText(json, style: const TextStyle(fontSize: 11)),
+                                                      ),
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () => Navigator.of(dctx).pop(),
+                                                        child: const Text('Fermer'),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              );
+                                            },
+                                            child: const Text('Perf'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () async {
+                                              final json = await mapProvider.exportAnalyticsBufferJson();
+                                              if (!ctx.mounted) return;
+                                              await showDialog<void>(
+                                                context: ctx,
+                                                builder: (dctx) {
+                                                  return AlertDialog(
+                                                    title: const Text('Buffer analytics (local)'),
+                                                    content: SizedBox(
+                                                      width: double.maxFinite,
+                                                      child: SingleChildScrollView(
+                                                        child: SelectableText(json ?? 'Aucun événement.', style: const TextStyle(fontSize: 11)),
+                                                      ),
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () => Navigator.of(dctx).pop(),
+                                                        child: const Text('Fermer'),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              );
+                                            },
+                                            child: const Text('Analytics'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: () => Navigator.of(ctx).pop(),
+                                            child: const Text('Fermer'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: FilledButton(
+                                            onPressed: () async {
+                                              final ok = await showDialog<bool>(
+                                                context: ctx,
+                                                builder: (dctx) {
+                                                  return AlertDialog(
+                                                    title: const Text('Effacement rapide ?'),
+                                                    content: const Text('Supprime caches, packs offline et clés locales. Action irréversible.'),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () => Navigator.of(dctx).pop(false),
+                                                        child: const Text('Annuler'),
+                                                      ),
+                                                      FilledButton(
+                                                        onPressed: () => Navigator.of(dctx).pop(true),
+                                                        child: const Text('Effacer'),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              );
+                                              if (ok == true) {
+                                                await mapProvider.panicWipeAllLocalData();
+                                                if (ctx.mounted) Navigator.of(ctx).pop();
+                                              }
+                                            },
+                                            child: const Text('Panic wipe'),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
-                                  const SizedBox(width: 6),
-                                  InkWell(
-                                    onTap: () async {
-                                      await showModalBottomSheet<void>(
-                                        context: context,
-                                        showDragHandle: true,
-                                        builder: (ctx) {
-                                          return SafeArea(
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(16),
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  const Text('Couches météo (expert)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                                                  const SizedBox(height: 12),
-                                                  Row(
-                                                    children: [
-                                                      const Expanded(child: Text('Mode expert', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
-                                                      Switch(
-                                                        value: mapProvider.expertWeatherMode,
-                                                        onChanged: (v) => mapProvider.setExpertWeatherMode(v),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  Row(
-                                                    children: [
-                                                      const Expanded(child: Text('Vent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
-                                                      Switch(
-                                                        value: mapProvider.expertWindLayer,
-                                                        onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertWindLayer(v) : null,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  Row(
-                                                    children: [
-                                                      const Expanded(child: Text('Pluie', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
-                                                      Switch(
-                                                        value: mapProvider.expertRainLayer,
-                                                        onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertRainLayer(v) : null,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  Row(
-                                                    children: [
-                                                      const Expanded(child: Text('Nuages', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
-                                                      Switch(
-                                                        value: mapProvider.expertCloudLayer,
-                                                        onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertCloudLayer(v) : null,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  const Text(
-                                                    'Ces couches restent locales et sont contextualisées par l’itinéraire quand il existe.',
-                                                    style: TextStyle(fontSize: 12, color: Colors.black54),
-                                                  ),
-                                                ],
-                                              ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        child: HorizonCard(
+                          blur: false,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF88D3A2),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Icon(
+                                mapProvider.weatherError != null
+                                    ? Icons.cloud_off_rounded
+                                    : (mapProvider.weatherLoading ? Icons.cloud_sync_rounded : Icons.wb_sunny_rounded),
+                                size: 18,
+                                color: mapProvider.weatherError != null
+                                    ? const Color(0xFFB55A5A)
+                                    : (mapProvider.weatherLoading ? const Color(0xFF4A90A0) : const Color(0xFFFFC56E)),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                mapProvider.weatherError != null
+                                    ? 'Météo indisponible'
+                                    : (mapProvider.weatherDecision == null
+                                        ? 'Météo…'
+                                        : '${mapProvider.weatherDecision!.now.temperature.round()}°C  •  confort ${mapProvider.weatherDecision!.comfortScore.toStringAsFixed(1)}/10  •  conf ${(mapProvider.weatherDecision!.confidence * 100).round()}%'),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.2,
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
+                                ),
+                              ),
+                              if (mapProvider.isOnline == false) ...[
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Offline',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(width: 6),
+                              InkWell(
+                                onTap: () async {
+                                  await showModalBottomSheet<void>(
+                                    context: context,
+                                    showDragHandle: false,
+                                    builder: (ctx) {
+                                      final theme = Theme.of(ctx);
+                                      final muted = theme.colorScheme.onSurface.withOpacity(0.60);
+                                      return HorizonBottomSheet(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text('Couches météo (expert)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                            const SizedBox(height: 12),
+                                            Row(
+                                              children: [
+                                                const Expanded(child: Text('Mode expert', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                Switch(
+                                                  value: mapProvider.expertWeatherMode,
+                                                  onChanged: (v) => mapProvider.setExpertWeatherMode(v),
+                                                ),
+                                              ],
                                             ),
-                                          );
-                                        },
+                                            Row(
+                                              children: [
+                                                const Expanded(child: Text('Vent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                Switch(
+                                                  value: mapProvider.expertWindLayer,
+                                                  onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertWindLayer(v) : null,
+                                                ),
+                                              ],
+                                            ),
+                                            Row(
+                                              children: [
+                                                const Expanded(child: Text('Pluie', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                Switch(
+                                                  value: mapProvider.expertRainLayer,
+                                                  onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertRainLayer(v) : null,
+                                                ),
+                                              ],
+                                            ),
+                                            Row(
+                                              children: [
+                                                const Expanded(child: Text('Nuages', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                Switch(
+                                                  value: mapProvider.expertCloudLayer,
+                                                  onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertCloudLayer(v) : null,
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Ces couches restent locales et sont contextualisées par l’itinéraire quand il existe.',
+                                              style: TextStyle(fontSize: 12, color: muted),
+                                            ),
+                                          ],
+                                        ),
                                       );
                                     },
-                                    child: const Icon(Icons.layers_outlined, size: 18, color: Colors.black54),
-                                  ),
-                                ],
+                                  );
+                                },
+                                child: Icon(
+                                  Icons.layers_outlined,
+                                  size: 18,
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                       ),
@@ -545,18 +638,27 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                             const SizedBox(height: 4),
                                             Text(
                                               'T ${t.toStringAsFixed(0)}°C • pluie ${rain.toStringAsFixed(1)} mm • vent ${_msToKmh(wind).toStringAsFixed(0)} km/h • conf $confPct%${relLabel == null ? '' : ' ($relLabel)'}',
-                                              style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
+                                              ),
                                             ),
                                             const SizedBox(height: 6),
                                             Text(
                                               'Vent relatif : ${s.relativeWindKind.name} • impact ${s.relativeWindImpact.toStringAsFixed(0)}',
-                                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                              ),
                                             ),
                                             if (s.comfortBreakdown != null && s.comfortBreakdown!.contributions.isNotEmpty) ...[
                                               const SizedBox(height: 6),
                                               Text(
                                                 'Impact : ${s.comfortBreakdown!.contributions.take(2).map((c) => '${c.label} ${c.delta.toStringAsFixed(1)}').join(' • ')}',
-                                                style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                                ),
                                               ),
                                             ],
                                           ],
@@ -567,7 +669,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   const SizedBox(width: 10),
                                   InkWell(
                                     onTap: () => mapProvider.clearSelectedRouteWeatherSample(),
-                                    child: const Icon(Icons.close_rounded, size: 18, color: Colors.black54),
+                                    child: Icon(
+                                      Icons.close_rounded,
+                                      size: 18,
+                                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -585,8 +691,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           // Bottom Search / Controls
           Positioned(
             bottom: 40,
-            left: 20,
-            right: 20,
+            left: edgeInset,
+            right: edgeInset,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -613,10 +719,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                           : (mapProvider.selectedVariant == RouteVariantKind.imported && mapProvider.gpxRouteName != null
                                               ? 'GPX: ${mapProvider.gpxRouteName}'
                                               : 'Variante')),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.black87,
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
                               ),
                             ),
                             if (mapProvider.routeVariants.isNotEmpty) ...[
@@ -656,7 +762,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                               const SizedBox(width: 10),
                               InkWell(
                                 onTap: () => mapProvider.clearRoute(),
-                                child: const Icon(Icons.close_rounded, size: 18, color: Colors.black54),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                ),
                               ),
                               const SizedBox(width: 10),
                               InkWell(
@@ -666,101 +776,103 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   final all = mapProvider.routeExplanations;
                                   await showModalBottomSheet<void>(
                                     context: context,
-                                    showDragHandle: true,
+                                    showDragHandle: false,
                                     builder: (ctx) {
+                                      final theme = Theme.of(ctx);
                                       final entries = all.entries.toList();
                                       entries.sort((a, b) => a.key.index.compareTo(b.key.index));
 
-                                      return SafeArea(
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(16),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const Text('Pourquoi cette route ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                                              const SizedBox(height: 10),
-                                              Text(selected.headline, style: const TextStyle(fontWeight: FontWeight.w700)),
-                                              if (selected.caveat != null) ...[
-                                                const SizedBox(height: 6),
-                                                Text(selected.caveat!, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                                              ],
-                                              if (selected.metrics.avgConfidence > 0) ...[
-                                                const SizedBox(height: 6),
-                                                Text(
-                                                  'Fiabilité : ${mapProvider.confidenceLabel(selected.metrics.avgConfidence)} (confiance ${(selected.metrics.avgConfidence * 100).round()}%)',
-                                                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                                                ),
-                                              ],
-                                              const SizedBox(height: 12),
-                                              if (selected.factors.isEmpty)
-                                                const Text('Aucun facteur dominant détecté.', style: TextStyle(color: Colors.black54))
-                                              else
-                                                ...selected.factors.map((f) {
-                                                  return Padding(
-                                                    padding: const EdgeInsets.only(bottom: 8),
-                                                    child: Row(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        Container(
-                                                          width: 8,
-                                                          height: 8,
-                                                          margin: const EdgeInsets.only(top: 6),
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(0xFF4A90A0).withOpacity(0.75),
-                                                            shape: BoxShape.circle,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 10),
-                                                        Expanded(
-                                                          child: Column(
-                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                            children: [
-                                                              Text(f.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                                                              const SizedBox(height: 2),
-                                                              Text(f.detail, style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  );
-                                                }),
-                                              const SizedBox(height: 12),
-                                              const Text('Comparaison rapide', style: TextStyle(fontWeight: FontWeight.w800)),
-                                              const SizedBox(height: 8),
-                                              ...entries.map((e) {
-                                                final ex = e.value;
-                                                final label = e.key == RouteVariantKind.fast
-                                                    ? 'Rapide'
-                                                    : (e.key == RouteVariantKind.safe
-                                                        ? 'Sûre'
-                                                        : (e.key == RouteVariantKind.scenic ? 'Calme' : 'GPX'));
-                                                final selectedMark = e.key == mapProvider.selectedVariant ? ' • sélectionnée' : '';
+                                      final muted = theme.colorScheme.onSurface.withOpacity(0.60);
+                                      final body = theme.colorScheme.onSurface.withOpacity(0.88);
+
+                                      return HorizonBottomSheet(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text('Pourquoi cette route ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                            const SizedBox(height: 10),
+                                            Text(selected.headline, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                            if (selected.caveat != null) ...[
+                                              const SizedBox(height: 6),
+                                              Text(selected.caveat!, style: TextStyle(fontSize: 12, color: muted)),
+                                            ],
+                                            if (selected.metrics.avgConfidence > 0) ...[
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                'Fiabilité : ${mapProvider.confidenceLabel(selected.metrics.avgConfidence)} (confiance ${(selected.metrics.avgConfidence * 100).round()}%)',
+                                                style: TextStyle(fontSize: 12, color: muted),
+                                              ),
+                                            ],
+                                            const SizedBox(height: 12),
+                                            if (selected.factors.isEmpty)
+                                              Text('Aucun facteur dominant détecté.', style: TextStyle(color: muted))
+                                            else
+                                              ...selected.factors.map((f) {
                                                 return Padding(
-                                                  padding: const EdgeInsets.only(bottom: 6),
-                                                  child: Text(
-                                                    '$label$selectedMark — vent ${_msToKmh(ex.metrics.avgWind).toStringAsFixed(0)} km/h, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
-                                                    style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                  padding: const EdgeInsets.only(bottom: 8),
+                                                  child: Row(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Container(
+                                                        width: 8,
+                                                        height: 8,
+                                                        margin: const EdgeInsets.only(top: 6),
+                                                        decoration: BoxDecoration(
+                                                          color: theme.colorScheme.primary.withOpacity(0.65),
+                                                          shape: BoxShape.circle,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Expanded(
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Text(f.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                                            const SizedBox(height: 2),
+                                                            Text(f.detail, style: TextStyle(fontSize: 12, color: body)),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 );
                                               }),
-                                              const SizedBox(height: 14),
-                                              const Text('Comparer départs', style: TextStyle(fontWeight: FontWeight.w800)),
-                                              const SizedBox(height: 8),
-                                              FutureBuilder(
-                                                future: mapProvider.compareDeparturesForSelectedVariant(),
-                                                builder: (context, snap) {
-                                                  final data = snap.data;
-                                                  if (snap.connectionState != ConnectionState.done) {
-                                                    return const Padding(
-                                                      padding: EdgeInsets.symmetric(vertical: 10),
-                                                      child: LinearProgressIndicator(minHeight: 3),
-                                                    );
-                                                  }
-                                                  if (data == null || data.isEmpty) {
-                                                    return const Text('Indisponible.', style: TextStyle(fontSize: 12, color: Colors.black54));
-                                                  }
+                                            const SizedBox(height: 12),
+                                            const Text('Comparaison rapide', style: TextStyle(fontWeight: FontWeight.w800)),
+                                            const SizedBox(height: 8),
+                                            ...entries.map((e) {
+                                              final ex = e.value;
+                                              final label = e.key == RouteVariantKind.fast
+                                                  ? 'Rapide'
+                                                  : (e.key == RouteVariantKind.safe
+                                                      ? 'Sûre'
+                                                      : (e.key == RouteVariantKind.scenic ? 'Calme' : 'GPX'));
+                                              final selectedMark = e.key == mapProvider.selectedVariant ? ' • sélectionnée' : '';
+                                              return Padding(
+                                                padding: const EdgeInsets.only(bottom: 6),
+                                                child: Text(
+                                                  '$label$selectedMark — vent ${_msToKmh(ex.metrics.avgWind).toStringAsFixed(0)} km/h, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
+                                                  style: TextStyle(fontSize: 12, color: body),
+                                                ),
+                                              );
+                                            }),
+                                            const SizedBox(height: 14),
+                                            const Text('Comparer départs', style: TextStyle(fontWeight: FontWeight.w800)),
+                                            const SizedBox(height: 8),
+                                            FutureBuilder(
+                                              future: mapProvider.compareDeparturesForSelectedVariant(),
+                                              builder: (context, snap) {
+                                                final data = snap.data;
+                                                if (snap.connectionState != ConnectionState.done) {
+                                                  return const Padding(
+                                                    padding: EdgeInsets.symmetric(vertical: 10),
+                                                    child: LinearProgressIndicator(minHeight: 3),
+                                                  );
+                                                }
+                                                if (data == null || data.isEmpty) {
+                                                  return Text('Indisponible.', style: TextStyle(fontSize: 12, color: muted));
+                                                }
 
                                                   RouteDepartureComparison best = data.first;
                                                   double bestScore = -999;
@@ -793,14 +905,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                                           padding: const EdgeInsets.only(bottom: 6),
                                                           child: Text(
                                                             '${labelFor(c.offset)} — confort ${c.avgComfort.toStringAsFixed(1)}/10 (min ${c.minComfort.toStringAsFixed(1)}), pluie ~${c.rainKm.toStringAsFixed(1)} km, vent ${windLabel(c.dominantWind.name)}, conf $conf%',
-                                                            style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                            style: TextStyle(fontSize: 12, color: body),
                                                           ),
                                                         );
                                                       }),
                                                       const SizedBox(height: 6),
                                                       Text(
                                                         'Recommandation : ${labelFor(best.offset)} (estimé)',
-                                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: body),
                                                       ),
                                                     ],
                                                   );
@@ -881,11 +993,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             decoration: _glassDecoration(),
                             child: Text(
                               mapProvider.gpxImportLoading
-                                  ? 'Import GPX…'
+                                  ? 'Import…'
                                   : (mapProvider.gpxImportError ?? 'Import GPX'),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: mapProvider.gpxImportError == null ? Colors.black87 : const Color(0xFF7A2D2D),
+                                color: mapProvider.gpxImportError == null
+                                    ? Theme.of(context).colorScheme.onSurface.withOpacity(0.88)
+                                    : const Color(0xFF7A2D2D),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -909,7 +1023,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             decoration: _glassDecoration(opacity: 0.54),
                             child: Text(
                               mapProvider.routeExplanation!,
-                              style: const TextStyle(fontSize: 12, color: Colors.black87),
+                              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88)),
                             ),
                           ),
                         ),
@@ -963,7 +1077,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       mapProvider.pmtilesEnabled
                           ? Icons.storage_rounded
                           : Icons.storage_outlined,
-                      color: mapProvider.pmtilesEnabled ? const Color(0xFF2E2E2E) : Colors.black87,
+                      color: mapProvider.pmtilesEnabled
+                          ? Theme.of(context).colorScheme.onSurface.withOpacity(0.88)
+                          : Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
                     ),
                   ),
                 ),
@@ -997,9 +1113,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   ),
                                   const SizedBox(height: 12),
                                   if (packs.isEmpty)
-                                    const Text(
+                                    Text(
                                       'Aucun pack installé.',
-                                      style: TextStyle(color: Colors.black54),
+                                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60)),
                                     )
                                   else
                                     Flexible(
@@ -1025,7 +1141,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                                     const SizedBox(height: 4),
                                                     Text(
                                                       '${p.type.name} • ${_formatBytes(p.sizeBytes)}',
-                                                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
@@ -1071,7 +1190,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         },
                       );
                     },
-                    child: const Icon(Icons.download_for_offline_outlined, color: Colors.black87),
+                    child: Icon(
+                      Icons.download_for_offline_outlined,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
+                    ),
                   ),
                 ),
 
@@ -1094,7 +1216,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     onPressed: () {
                       mapProvider.importGpxRoute();
                     },
-                    child: const Icon(Icons.upload_file_rounded, color: Colors.black87),
+                    child: Icon(
+                      Icons.upload_file_rounded,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
+                    ),
                   ),
                 ),
 
@@ -1114,7 +1239,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         children: [
                           Text(
                             "Maintenant",
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.black.withOpacity(0.70)),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
+                            ),
                           ),
                           Text(
                             "+${mapProvider.timeOffset.toInt()}h",
@@ -1122,7 +1251,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           ),
                           Text(
                             "+24h",
-                            style: TextStyle(fontSize: 10, color: Colors.black.withOpacity(0.55), fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
@@ -1155,8 +1288,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   child: TextField(
                     decoration: InputDecoration(
                       hintText: "Où allez-vous ?",
-                      hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 16),
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      hintStyle: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                        fontSize: 16,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                      ),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),

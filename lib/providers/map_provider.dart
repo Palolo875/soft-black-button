@@ -763,9 +763,27 @@ class MapProvider with ChangeNotifier {
     }
     _lastRouteComputeAt = now;
 
-    _routingLoading = true;
     _routingError = null;
+    _routingLoading = true;
     notifyListeners();
+
+    if (_isOnline == false) {
+      try {
+        final cached = await _loadRouteCache(start, end);
+        if (cached != null) {
+          _routeVariants = cached;
+          _routingError = 'Mode conservateur (offline)';
+          _routingLoading = false;
+          notifyListeners();
+          return;
+        }
+      } catch (_) {}
+
+      _routingLoading = false;
+      _routingError = 'Offline';
+      notifyListeners();
+      return;
+    }
 
     try {
       final sw = Stopwatch()..start();
@@ -1376,6 +1394,13 @@ class MapProvider with ChangeNotifier {
     double minZoom = 10,
     double maxZoom = 14,
   }) async {
+    if (kIsWeb) {
+      _offlineDownloadError = 'Téléchargement offline non supporté sur Web.';
+      _offlineDownloadProgress = null;
+      notifyListeners();
+      return;
+    }
+
     final controller = _mapController;
     if (controller == null) return;
 

@@ -49,6 +49,6 @@ class OfflineService {
   }
 
   Future<void> deleteRegion(int id) async {
-    if (kIsWeb) return;
+    return;
   }
 }
