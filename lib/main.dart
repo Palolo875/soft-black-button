@@ -12,7 +12,6 @@ import 'package:app/providers/location_provider.dart';
 import 'package:app/providers/weather_provider.dart';
 import 'package:app/providers/routing_provider.dart';
 import 'package:app/providers/offline_provider.dart';
-import 'package:provider/provider.dart';
 
 void main() {
   final deps = AppDependencies.create();

@@ -11,6 +11,7 @@ import 'package:app/services/perf_metrics.dart';
 import 'package:app/services/weather_engine_sota.dart';
 import 'package:app/services/weather_models.dart';
 import 'package:app/services/weather_service.dart';
+import 'package:app/core/format/confidence_label.dart';
 
 class WeatherProvider with ChangeNotifier {
   final WeatherService _weatherService;
@@ -106,9 +107,7 @@ class WeatherProvider with ChangeNotifier {
   }
 
   String confidenceLabel(double confidence) {
-    if (confidence >= 0.75) return 'Fiable';
-    if (confidence >= 0.50) return 'Variable';
-    return 'Incertain';
+    return confidenceLabelFr(confidence);
   }
 
   String? get currentWeatherReliabilityLabel {
@@ -170,7 +169,12 @@ class WeatherProvider with ChangeNotifier {
 
     try {
       await controller.addSource('expert-weather', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('weather.ensureExpertWeatherLayers addSource(expert-weather) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     try {
       await controller.addCircleLayer(
@@ -203,7 +207,12 @@ class WeatherProvider with ChangeNotifier {
           circleBlur: 0.2,
         ),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('weather.ensureExpertWeatherLayers addCircleLayer(expert-wind-layer) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     try {
       await controller.addCircleLayer(
@@ -236,7 +245,12 @@ class WeatherProvider with ChangeNotifier {
           circleBlur: 0.35,
         ),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('weather.ensureExpertWeatherLayers addCircleLayer(expert-rain-layer) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     try {
       await controller.addCircleLayer(
@@ -265,7 +279,12 @@ class WeatherProvider with ChangeNotifier {
           circleBlur: 0.25,
         ),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('weather.ensureExpertWeatherLayers addCircleLayer(expert-cloud-layer) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     await _renderExpertWeatherLayers();
   }
@@ -278,7 +297,12 @@ class WeatherProvider with ChangeNotifier {
     if (!_expertWeatherMode) {
       try {
         await controller.setGeoJsonSource('expert-weather', _emptyFeatureCollection());
-      } catch (_) {}
+      } catch (e, st) {
+        assert(() {
+          AppLog.w('weather.renderExpertWeatherLayers clear source failed', error: e, stackTrace: st);
+          return true;
+        }());
+      }
       return;
     }
 
@@ -305,13 +329,23 @@ class WeatherProvider with ChangeNotifier {
         'type': 'FeatureCollection',
         'features': points,
       });
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('weather.renderExpertWeatherLayers setGeoJsonSource failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     try {
       await controller.setPaintProperty('expert-wind-layer', 'circle-opacity', _expertWindLayer ? 0.55 : 0.0);
       await controller.setPaintProperty('expert-rain-layer', 'circle-opacity', _expertRainLayer ? 0.42 : 0.0);
       await controller.setPaintProperty('expert-cloud-layer', 'circle-opacity', _expertCloudLayer ? 0.28 : 0.0);
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('weather.renderExpertWeatherLayers setPaintProperty failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
   }
 
   void setExpertWeatherMode(bool enabled) {

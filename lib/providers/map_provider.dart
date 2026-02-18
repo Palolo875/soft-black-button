@@ -8,6 +8,7 @@ import 'package:app/services/perf_metrics.dart';
 import 'package:app/providers/routing_provider.dart';
 import 'package:app/providers/offline_provider.dart';
 import 'package:app/core/log/app_log.dart';
+import 'package:app/core/format/confidence_label.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;
@@ -59,9 +60,7 @@ class MapProvider with ChangeNotifier {
   bool get lowPowerMode => _lowPowerMode;
 
   String confidenceLabel(double confidence) {
-    if (confidence >= 0.75) return 'Fiable';
-    if (confidence >= 0.50) return 'Variable';
-    return 'Incertain';
+    return confidenceLabelFr(confidence);
   }
 
   void syncIsOnlineFromConnectivity(bool? isOnline) {

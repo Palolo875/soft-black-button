@@ -175,7 +175,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       mapProvider.centerOnUser(target);
       final weather = Provider.of<WeatherProvider>(context, listen: false);
       unawaited(weather.refreshWeatherAt(target, userInitiated: true));
-    } catch (_) {
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('map.recenterOnUser failed', error: e, stackTrace: st);
+        return true;
+      }());
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Impossible de récupérer la position. Vérifie les permissions et le GPS.')),

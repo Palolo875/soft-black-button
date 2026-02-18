@@ -16,6 +16,7 @@ import 'package:app/services/route_weather_projector.dart';
 import 'package:app/services/routing_engine.dart';
 import 'package:app/services/routing_models.dart';
 import 'package:app/services/notification_service.dart';
+import 'package:app/core/format/confidence_label.dart';
 
 class RoutingProvider with ChangeNotifier {
   final RoutingEngine _routingEngine;
@@ -130,9 +131,7 @@ class RoutingProvider with ChangeNotifier {
   }
 
   String confidenceLabel(double confidence) {
-    if (confidence >= 0.75) return 'Fiable';
-    if (confidence >= 0.50) return 'Variable';
-    return 'Incertain';
+    return confidenceLabelFr(confidence);
   }
 
   String? get selectedSampleReliabilityLabel {
@@ -244,7 +243,12 @@ class RoutingProvider with ChangeNotifier {
           await _afterVariantsUpdated();
           return;
         }
-      } catch (_) {}
+      } catch (e, st) {
+        assert(() {
+          AppLog.w('routing.offline cache load failed', error: e, stackTrace: st);
+          return true;
+        }());
+      }
 
       _routingLoading = false;
       _routingError = 'Offline';
@@ -532,7 +536,12 @@ class RoutingProvider with ChangeNotifier {
         'type': 'FeatureCollection',
         'features': features,
       });
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.renderRouteMarkers setGeoJsonSource failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
   }
 
   Future<void> _renderSelectedRoute() async {
@@ -559,7 +568,12 @@ class RoutingProvider with ChangeNotifier {
           },
         ],
       });
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.renderSelectedRoute setGeoJsonSource(route-source) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     try {
       final geo = _routeWeatherProjector.buildSegments(v);
@@ -584,7 +598,12 @@ class RoutingProvider with ChangeNotifier {
         'type': 'FeatureCollection',
         'features': points,
       });
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.renderSelectedRoute weather layers failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
   }
 
   Future<void> _clearRouteLayers() async {
@@ -596,7 +615,12 @@ class RoutingProvider with ChangeNotifier {
       await controller.setGeoJsonSource('route-markers', _emptyFeatureCollection());
       await controller.setGeoJsonSource('route-weather-segments', _emptyFeatureCollection());
       await controller.setGeoJsonSource('route-weather', _emptyFeatureCollection());
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.clearRouteLayers failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
   }
 
   Map<String, dynamic> _emptyFeatureCollection() => const {
@@ -678,7 +702,12 @@ class RoutingProvider with ChangeNotifier {
 
     try {
       await controller.addSource('route-source', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.ensureRouteLayers addSource(route-source) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
     try {
       await controller.addLineLayer(
         'route-source',
@@ -691,11 +720,21 @@ class RoutingProvider with ChangeNotifier {
           lineCap: 'round',
         ),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.ensureRouteLayers addLineLayer(route-line) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     try {
       await controller.addSource('route-weather-segments', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.ensureRouteLayers addSource(route-weather-segments) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
     try {
       await controller.addLineLayer(
         'route-weather-segments',
@@ -726,11 +765,21 @@ class RoutingProvider with ChangeNotifier {
           ],
         ),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.ensureRouteLayers addLineLayer(route-weather-segments-layer) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     try {
       await controller.addSource('route-markers', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.ensureRouteLayers addSource(route-markers) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
     try {
       await controller.addCircleLayer(
         'route-markers',
@@ -747,11 +796,21 @@ class RoutingProvider with ChangeNotifier {
           circleStrokeWidth: 2.0,
         ),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.ensureRouteLayers addCircleLayer(route-markers-layer) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
 
     try {
       await controller.addSource('route-weather', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.ensureRouteLayers addSource(route-weather) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
     try {
       await controller.addCircleLayer(
         'route-weather',
@@ -791,7 +850,12 @@ class RoutingProvider with ChangeNotifier {
           circleStrokeWidth: 1.2,
         ),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('routing.ensureRouteLayers addCircleLayer(route-weather-layer) failed', error: e, stackTrace: st);
+        return true;
+      }());
+    }
   }
 
   @override

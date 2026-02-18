@@ -65,7 +65,14 @@ class OfflineDownloader {
       if (await bak.exists()) {
         await bak.delete();
       }
-    } catch (e) {
+    } catch (e, st) {
+      assert(() {
+        AppLog.w('offlineDownloader.atomicSwap failed', error: e, stackTrace: st, props: {
+          'url': url.toString(),
+          'destination': destination.path,
+        });
+        return true;
+      }());
       // Restore previous version if possible.
       try {
         if (await destination.exists()) {
