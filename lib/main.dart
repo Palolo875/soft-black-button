@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
@@ -116,13 +117,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   BoxDecoration _glassDecoration({double opacity = 0.62}) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return BoxDecoration(
-      color: Colors.white.withOpacity(opacity),
+      color: scheme.surface.withOpacity(opacity),
       borderRadius: BorderRadius.circular(_glassRadius),
-      border: Border.all(color: Colors.white.withOpacity(0.32)),
+      border: Border.all(color: scheme.outlineVariant.withOpacity(theme.brightness == Brightness.dark ? 0.22 : 0.32)),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.06),
+          color: scheme.shadow.withOpacity(theme.brightness == Brightness.dark ? 0.22 : 0.06),
           blurRadius: 30,
           offset: const Offset(0, 12),
         ),
@@ -131,19 +134,36 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _recenterOnUser(MapProvider mapProvider) async {
+    if (kIsWeb) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Localisation limitée sur Web. Autorise la permission navigateur puis réessaie.')),
+      );
+      return;
+    }
+
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
       );
       mapProvider.centerOnUser(LatLng(position.latitude, position.longitude));
     } catch (_) {
-      // Permissions / service disabled / timeout.
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible de récupérer la position. Vérifie les permissions et le GPS.')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final mapProvider = Provider.of<MapProvider>(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final onSurfaceStrong = scheme.onSurface.withOpacity(0.88);
+    final onSurfaceMuted = scheme.onSurface.withOpacity(0.60);
+    final onSurfaceSubtle = scheme.onSurface.withOpacity(0.55);
+    final onSurfaceHint = scheme.onSurface.withOpacity(0.70);
     final w = MediaQuery.sizeOf(context).width;
     final edgeInset = w >= HorizonBreakpoints.medium
         ? HorizonTokens.space32
@@ -173,7 +193,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               child: Hero(
                 tag: 'status-pill',
                 child: Material(
-                  color: Colors.transparent,
+                  color: scheme.surface.withOpacity(0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -183,170 +203,44 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           if (!context.mounted) return;
                           await showModalBottomSheet<void>(
                             context: context,
-                            showDragHandle: true,
+                            showDragHandle: false,
                             builder: (ctx) {
                               final theme = Theme.of(ctx);
-                              final muted = theme.colorScheme.onSurface.withOpacity(0.60);
-                              return SafeArea(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Confiance & confidentialité', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          const Expanded(child: Text('Mode économie batterie', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
-                                          Switch(
-                                            value: mapProvider.lowPowerMode,
-                                            onChanged: (v) => mapProvider.setLowPowerMode(v),
+                              final scheme = theme.colorScheme;
+                              final muted = scheme.onSurface.withOpacity(0.60);
+                              final textTheme = theme.textTheme;
+                              return HorizonBottomSheet(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Confiance & confidentialité',
+                                      style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'Mode économie batterie',
+                                            style: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
                                           ),
-                                        ],
-                                      ),
-                                      Row(
-                                        children: [
-                                          const Expanded(child: Text('Analytics anonymes (opt-in)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
-                                          Switch(
-                                            value: mapProvider.analyticsSettings.level == AnalyticsLevel.anonymous,
-                                            onChanged: (v) => mapProvider.setAnalyticsLevel(v ? AnalyticsLevel.anonymous : AnalyticsLevel.off),
-                                          ),
-                                        ],
-                                      ),
-                                      Row(
-                                        children: [
-                                          const Expanded(child: Text('Notifications (opt-in)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
-                                          Switch(
-                                            value: mapProvider.notificationsEnabled,
-                                            onChanged: (v) => mapProvider.setNotificationsEnabled(v),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text('Stockage sécurisé : ${_formatBytes(report.secureStoreBytes)}', style: const TextStyle(fontSize: 12)),
-                                      Text('Cache itinéraires (legacy) : ${_formatBytes(report.routeCacheBytes)}', style: const TextStyle(fontSize: 12)),
-                                      Text('Cache météo (legacy) : ${_formatBytes(report.weatherCacheBytes)}', style: const TextStyle(fontSize: 12)),
-                                      Text('Packs offline : ${_formatBytes(report.offlinePacksBytes)}', style: const TextStyle(fontSize: 12)),
-                                      const SizedBox(height: 8),
-                                      Text('Total : ${_formatBytes(report.totalBytes)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                                      const SizedBox(height: 14),
-                                      Text(
-                                        'HORIZON fonctionne sans compte. Les données restent sur l’appareil.\nLong-press ici pour gérer/effacer rapidement.',
-                                        style: TextStyle(fontSize: 12, color: muted),
-                                      ),
-                                      const SizedBox(height: 14),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: OutlinedButton(
-                                              onPressed: () async {
-                                                final json = await mapProvider.exportPerfMetricsJson();
-                                                if (!ctx.mounted) return;
-                                                await showDialog<void>(
-                                                  context: ctx,
-                                                  builder: (dctx) {
-                                                    return AlertDialog(
-                                                      title: const Text('Rapport perf (local)'),
-                                                      content: SizedBox(
-                                                        width: double.maxFinite,
-                                                        child: SingleChildScrollView(
-                                                          child: SelectableText(json, style: const TextStyle(fontSize: 11)),
-                                                        ),
-                                                      ),
-                                                      actions: [
-                                                        TextButton(
-                                                          onPressed: () => Navigator.of(dctx).pop(),
-                                                          child: const Text('Fermer'),
-                                                        ),
-                                                      ],
-                                                    );
-                                                  },
-                                                );
-                                              },
-                                              child: const Text('Perf'),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: OutlinedButton(
-                                              onPressed: () async {
-                                                final json = await mapProvider.exportAnalyticsBufferJson();
-                                                if (!ctx.mounted) return;
-                                                await showDialog<void>(
-                                                  context: ctx,
-                                                  builder: (dctx) {
-                                                    return AlertDialog(
-                                                      title: const Text('Buffer analytics (local)'),
-                                                      content: SizedBox(
-                                                        width: double.maxFinite,
-                                                        child: SingleChildScrollView(
-                                                          child: SelectableText(json ?? 'Aucun événement.', style: const TextStyle(fontSize: 11)),
-                                                        ),
-                                                      ),
-                                                      actions: [
-                                                        TextButton(
-                                                          onPressed: () => Navigator.of(dctx).pop(),
-                                                          child: const Text('Fermer'),
-                                                        ),
-                                                      ],
-                                                    );
-                                                  },
-                                                );
-                                              },
-                                              child: const Text('Analytics'),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: OutlinedButton(
-                                              onPressed: () => Navigator.of(ctx).pop(),
-                                              child: const Text('Fermer'),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: FilledButton(
-                                              onPressed: () async {
-                                                final ok = await showDialog<bool>(
-                                                  context: ctx,
-                                                  builder: (dctx) {
-                                                    return AlertDialog(
-                                                      title: const Text('Effacement rapide ?'),
-                                                      content: const Text('Supprime caches, packs offline et clés locales. Action irréversible.'),
-                                                      actions: [
-                                                        TextButton(
-                                                          onPressed: () => Navigator.of(dctx).pop(false),
-                                                          child: const Text('Annuler'),
-                                                        ),
-                                                        FilledButton(
-                                                          onPressed: () => Navigator.of(dctx).pop(true),
-                                                          child: const Text('Effacer'),
-                                                        ),
-                                                      ],
-                                                    );
-                                                  },
-                                                );
-                                                if (ok == true) {
-                                                  await mapProvider.panicWipeAllLocalData();
-                                                  if (ctx.mounted) Navigator.of(ctx).pop();
-                                                }
-                                              },
-                                              child: const Text('Panic wipe'),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
+                                        ),
+                                        Switch(
+                                          value: mapProvider.lowPowerMode,
+                                          onChanged: (v) => mapProvider.setLowPowerMode(v),
+                                        ),
+                                      ],
                                     ),
                                     Row(
                                       children: [
-                                        const Expanded(child: Text('Analytics anonymes (opt-in)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                        Expanded(
+                                          child: Text(
+                                            'Analytics anonymes (opt-in)',
+                                            style: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                                          ),
+                                        ),
                                         Switch(
                                           value: mapProvider.analyticsSettings.level == AnalyticsLevel.anonymous,
                                           onChanged: (v) => mapProvider.setAnalyticsLevel(v ? AnalyticsLevel.anonymous : AnalyticsLevel.off),
@@ -355,7 +249,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     ),
                                     Row(
                                       children: [
-                                        const Expanded(child: Text('Notifications (opt-in)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                        Expanded(
+                                          child: Text(
+                                            'Notifications (opt-in)',
+                                            style: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                                          ),
+                                        ),
                                         Switch(
                                           value: mapProvider.notificationsEnabled,
                                           onChanged: (v) => mapProvider.setNotificationsEnabled(v),
@@ -363,16 +262,19 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                       ],
                                     ),
                                     const SizedBox(height: 8),
-                                    Text('Stockage sécurisé : ${_formatBytes(report.secureStoreBytes)}', style: const TextStyle(fontSize: 12)),
-                                    Text('Cache itinéraires (legacy) : ${_formatBytes(report.routeCacheBytes)}', style: const TextStyle(fontSize: 12)),
-                                    Text('Cache météo (legacy) : ${_formatBytes(report.weatherCacheBytes)}', style: const TextStyle(fontSize: 12)),
-                                    Text('Packs offline : ${_formatBytes(report.offlinePacksBytes)}', style: const TextStyle(fontSize: 12)),
+                                    Text('Stockage sécurisé : ${_formatBytes(report.secureStoreBytes)}', style: textTheme.bodySmall),
+                                    Text('Cache itinéraires (legacy) : ${_formatBytes(report.routeCacheBytes)}', style: textTheme.bodySmall),
+                                    Text('Cache météo (legacy) : ${_formatBytes(report.weatherCacheBytes)}', style: textTheme.bodySmall),
+                                    Text('Packs offline : ${_formatBytes(report.offlinePacksBytes)}', style: textTheme.bodySmall),
                                     const SizedBox(height: 8),
-                                    Text('Total : ${_formatBytes(report.totalBytes)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                    Text(
+                                      'Total : ${_formatBytes(report.totalBytes)}',
+                                      style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+                                    ),
                                     const SizedBox(height: 14),
                                     Text(
                                       'HORIZON fonctionne sans compte. Les données restent sur l’appareil.\nLong-press ici pour gérer/effacer rapidement.',
-                                      style: TextStyle(fontSize: 12, color: muted),
+                                      style: textTheme.bodySmall?.copyWith(color: muted),
                                     ),
                                     const SizedBox(height: 14),
                                     Row(
@@ -390,7 +292,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                                     content: SizedBox(
                                                       width: double.maxFinite,
                                                       child: SingleChildScrollView(
-                                                        child: SelectableText(json, style: const TextStyle(fontSize: 11)),
+                                                        child: SelectableText(
+                                                          json,
+                                                          style: Theme.of(ctx).textTheme.bodySmall,
+                                                        ),
                                                       ),
                                                     ),
                                                     actions: [
@@ -420,7 +325,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                                     content: SizedBox(
                                                       width: double.maxFinite,
                                                       child: SingleChildScrollView(
-                                                        child: SelectableText(json ?? 'Aucun événement.', style: const TextStyle(fontSize: 11)),
+                                                        child: SelectableText(
+                                                          json ?? 'Aucun événement.',
+                                                          style: Theme.of(ctx).textTheme.bodySmall,
+                                                        ),
                                                       ),
                                                     ),
                                                     actions: [
@@ -491,12 +399,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Container(
                                 width: 8,
                                 height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF88D3A2),
+                                decoration: BoxDecoration(
+                                  color: HorizonTokens.sage.withOpacity(0.85),
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -507,35 +416,52 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     : (mapProvider.weatherLoading ? Icons.cloud_sync_rounded : Icons.wb_sunny_rounded),
                                 size: 18,
                                 color: mapProvider.weatherError != null
-                                    ? const Color(0xFFB55A5A)
-                                    : (mapProvider.weatherLoading ? const Color(0xFF4A90A0) : const Color(0xFFFFC56E)),
+                                    ? HorizonTokens.terracotta
+                                    : (mapProvider.weatherLoading ? scheme.primary : HorizonTokens.sand),
+                              ),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      mapProvider.weatherError != null
+                                          ? 'Météo indisponible'
+                                          : (mapProvider.weatherDecision == null
+                                              ? 'Météo…'
+                                              : '${mapProvider.weatherDecision!.now.temperature.round()}°C'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: -0.4,
+                                            color: onSurfaceStrong,
+                                          ),
+                                    ),
+                                    if (mapProvider.weatherDecision != null && mapProvider.weatherError == null)
+                                      Text(
+                                        'confort ${mapProvider.weatherDecision!.comfortScore.toStringAsFixed(1)}/10  •  conf ${(mapProvider.weatherDecision!.confidence * 100).round()}%'
+                                        '${mapProvider.isOnline == false ? '  •  offline' : ''}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color: onSurfaceMuted,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      )
+                                    else if (mapProvider.isOnline == false)
+                                      Text(
+                                        'offline',
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color: onSurfaceMuted,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                  ],
+                                ),
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                mapProvider.weatherError != null
-                                    ? 'Météo indisponible'
-                                    : (mapProvider.weatherDecision == null
-                                        ? 'Météo…'
-                                        : '${mapProvider.weatherDecision!.now.temperature.round()}°C  •  confort ${mapProvider.weatherDecision!.comfortScore.toStringAsFixed(1)}/10  •  conf ${(mapProvider.weatherDecision!.confidence * 100).round()}%'),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.2,
-                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
-                                ),
-                              ),
-                              if (mapProvider.isOnline == false) ...[
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Offline',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(width: 6),
                               InkWell(
                                 onTap: () async {
                                   await showModalBottomSheet<void>(
@@ -543,54 +469,86 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     showDragHandle: false,
                                     builder: (ctx) {
                                       final theme = Theme.of(ctx);
-                                      final muted = theme.colorScheme.onSurface.withOpacity(0.60);
+                                      final scheme = theme.colorScheme;
+                                      final muted = scheme.onSurface.withOpacity(0.60);
+                                      final textTheme = theme.textTheme;
                                       return HorizonBottomSheet(
                                         child: Column(
                                           mainAxisSize: MainAxisSize.min,
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            const Text('Couches météo (expert)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                                            Text(
+                                              'Couches météo (expert)',
+                                              style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                                            ),
+                                            if (kIsWeb) ...[
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Non disponible sur Web pour le moment.',
+                                                style: textTheme.bodySmall?.copyWith(color: muted),
+                                              ),
+                                            ],
                                             const SizedBox(height: 12),
                                             Row(
                                               children: [
-                                                const Expanded(child: Text('Mode expert', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Mode expert',
+                                                    style: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                                                  ),
+                                                ),
                                                 Switch(
                                                   value: mapProvider.expertWeatherMode,
-                                                  onChanged: (v) => mapProvider.setExpertWeatherMode(v),
+                                                  onChanged: kIsWeb ? null : (v) => mapProvider.setExpertWeatherMode(v),
                                                 ),
                                               ],
                                             ),
                                             Row(
                                               children: [
-                                                const Expanded(child: Text('Vent', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Vent',
+                                                    style: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                                                  ),
+                                                ),
                                                 Switch(
                                                   value: mapProvider.expertWindLayer,
-                                                  onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertWindLayer(v) : null,
+                                                  onChanged: (!kIsWeb && mapProvider.expertWeatherMode) ? (v) => mapProvider.setExpertWindLayer(v) : null,
                                                 ),
                                               ],
                                             ),
                                             Row(
                                               children: [
-                                                const Expanded(child: Text('Pluie', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Pluie',
+                                                    style: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                                                  ),
+                                                ),
                                                 Switch(
                                                   value: mapProvider.expertRainLayer,
-                                                  onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertRainLayer(v) : null,
+                                                  onChanged: (!kIsWeb && mapProvider.expertWeatherMode) ? (v) => mapProvider.setExpertRainLayer(v) : null,
                                                 ),
                                               ],
                                             ),
                                             Row(
                                               children: [
-                                                const Expanded(child: Text('Nuages', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Nuages',
+                                                    style: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                                                  ),
+                                                ),
                                                 Switch(
                                                   value: mapProvider.expertCloudLayer,
-                                                  onChanged: mapProvider.expertWeatherMode ? (v) => mapProvider.setExpertCloudLayer(v) : null,
+                                                  onChanged: (!kIsWeb && mapProvider.expertWeatherMode) ? (v) => mapProvider.setExpertCloudLayer(v) : null,
                                                 ),
                                               ],
                                             ),
                                             const SizedBox(height: 8),
                                             Text(
                                               'Ces couches restent locales et sont contextualisées par l’itinéraire quand il existe.',
-                                              style: TextStyle(fontSize: 12, color: muted),
+                                              style: textTheme.bodySmall?.copyWith(color: muted),
                                             ),
                                           ],
                                         ),
@@ -598,10 +556,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                     },
                                   );
                                 },
-                                child: Icon(
-                                  Icons.layers_outlined,
-                                  size: 18,
-                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                child: Tooltip(
+                                  message: 'Couches météo',
+                                  child: Semantics(
+                                    button: true,
+                                    label: 'Ouvrir les couches météo',
+                                    child: Icon(
+                                      Icons.layers_outlined,
+                                      size: 18,
+                                      color: onSurfaceMuted,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -623,6 +588,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   Flexible(
                                     child: Builder(
                                       builder: (context) {
+                                        final theme = Theme.of(context);
+                                        final textTheme = theme.textTheme;
+                                        final strong = theme.colorScheme.onSurface.withOpacity(0.88);
+                                        final muted = theme.colorScheme.onSurface.withOpacity(0.60);
                                         final s = mapProvider.selectedRouteWeatherSample!;
                                         final t = s.snapshot.apparentTemperature.isFinite ? s.snapshot.apparentTemperature : s.snapshot.temperature;
                                         final rain = s.snapshot.precipitation;
@@ -634,31 +603,39 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                         return Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text('Point météo • ETA $hh:$mm', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
-                                            const SizedBox(height: 4),
                                             Text(
-                                              'T ${t.toStringAsFixed(0)}°C • pluie ${rain.toStringAsFixed(1)} mm • vent ${_msToKmh(wind).toStringAsFixed(0)} km/h • conf $confPct%${relLabel == null ? '' : ' ($relLabel)'}',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
+                                              'Point météo',
+                                              style: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w900),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'ETA $hh:$mm',
+                                              style: textTheme.bodySmall?.copyWith(color: muted, fontWeight: FontWeight.w600),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              '${t.toStringAsFixed(0)}°C',
+                                              style: textTheme.titleMedium?.copyWith(
+                                                fontWeight: FontWeight.w900,
+                                                letterSpacing: -0.4,
+                                                color: strong,
                                               ),
                                             ),
                                             const SizedBox(height: 6),
                                             Text(
+                                              'pluie ${rain.toStringAsFixed(1)} mm  •  vent ${_msToKmh(wind).toStringAsFixed(0)} km/h  •  conf $confPct%${relLabel == null ? '' : ' ($relLabel)'}',
+                                              style: textTheme.bodySmall?.copyWith(color: strong),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
                                               'Vent relatif : ${s.relativeWindKind.name} • impact ${s.relativeWindImpact.toStringAsFixed(0)}',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
-                                              ),
+                                              style: textTheme.bodySmall?.copyWith(color: muted),
                                             ),
                                             if (s.comfortBreakdown != null && s.comfortBreakdown!.contributions.isNotEmpty) ...[
                                               const SizedBox(height: 6),
                                               Text(
                                                 'Impact : ${s.comfortBreakdown!.contributions.take(2).map((c) => '${c.label} ${c.delta.toStringAsFixed(1)}').join(' • ')}',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
-                                                ),
+                                                style: textTheme.bodySmall?.copyWith(color: muted),
                                               ),
                                             ],
                                           ],
@@ -669,10 +646,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   const SizedBox(width: 10),
                                   InkWell(
                                     onTap: () => mapProvider.clearSelectedRouteWeatherSample(),
-                                    child: Icon(
-                                      Icons.close_rounded,
-                                      size: 18,
-                                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                                    child: Tooltip(
+                                      message: 'Fermer',
+                                      child: Semantics(
+                                        button: true,
+                                        label: 'Fermer le point météo',
+                                        child: Icon(
+                                          Icons.close_rounded,
+                                          size: 18,
+                                          color: onSurfaceMuted,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -706,248 +690,335 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: _glassDecoration(),
-                        child: Row(
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              mapProvider.routingLoading
-                                  ? 'Route…'
-                                  : (mapProvider.routingError != null
-                                      ? 'Route indisponible'
-                                      : (mapProvider.routeVariants.isEmpty
-                                          ? 'Long-press: départ puis arrivée'
-                                          : (mapProvider.selectedVariant == RouteVariantKind.imported && mapProvider.gpxRouteName != null
-                                              ? 'GPX: ${mapProvider.gpxRouteName}'
-                                              : 'Variante')),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
-                              ),
-                            ),
-                            if (mapProvider.routeVariants.isNotEmpty) ...[
-                              const SizedBox(width: 10),
-                              if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.fast)) ...[
-                                _RouteChip(
-                                  label: 'Rapide',
-                                  selected: mapProvider.selectedVariant == RouteVariantKind.fast,
-                                  onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.fast),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.safe)) ...[
-                                _RouteChip(
-                                  label: 'Sûre',
-                                  selected: mapProvider.selectedVariant == RouteVariantKind.safe,
-                                  onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.safe),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.scenic)) ...[
-                                _RouteChip(
-                                  label: 'Calme',
-                                  selected: mapProvider.selectedVariant == RouteVariantKind.scenic,
-                                  onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.scenic),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.imported)) ...[
-                                _RouteChip(
-                                  label: 'GPX',
-                                  selected: mapProvider.selectedVariant == RouteVariantKind.imported,
-                                  onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.imported),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              const SizedBox(width: 10),
-                              InkWell(
-                                onTap: () => mapProvider.clearRoute(),
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  size: 18,
-                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              InkWell(
-                                onTap: () async {
-                                  final selected = mapProvider.currentRouteExplanation;
-                                  if (selected == null) return;
-                                  final all = mapProvider.routeExplanations;
-                                  await showModalBottomSheet<void>(
-                                    context: context,
-                                    showDragHandle: false,
-                                    builder: (ctx) {
-                                      final theme = Theme.of(ctx);
-                                      final entries = all.entries.toList();
-                                      entries.sort((a, b) => a.key.index.compareTo(b.key.index));
+                            Row(
+                              mainAxisSize: MainAxisSize.max,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: Builder(
+                                    builder: (context) {
+                                      String title;
+                                      String? subtitle;
 
-                                      final muted = theme.colorScheme.onSurface.withOpacity(0.60);
-                                      final body = theme.colorScheme.onSurface.withOpacity(0.88);
+                                      if (mapProvider.routingLoading) {
+                                        title = 'Route…';
+                                      } else if (mapProvider.routingError != null) {
+                                        title = 'Route indisponible';
+                                      } else if (mapProvider.routeVariants.isEmpty) {
+                                        title = 'Itinéraire';
+                                        subtitle = 'Long-press: départ puis arrivée';
+                                      } else if (mapProvider.selectedVariant == RouteVariantKind.imported && mapProvider.gpxRouteName != null) {
+                                        title = 'GPX';
+                                        subtitle = mapProvider.gpxRouteName;
+                                      } else {
+                                        title = 'Variante';
+                                        subtitle = mapProvider.selectedVariant == RouteVariantKind.fast
+                                            ? 'Rapide'
+                                            : (mapProvider.selectedVariant == RouteVariantKind.safe
+                                                ? 'Sûre'
+                                                : (mapProvider.selectedVariant == RouteVariantKind.scenic
+                                                    ? 'Calme'
+                                                    : (mapProvider.selectedVariant == RouteVariantKind.imported ? 'GPX' : null)));
+                                      }
 
-                                      return HorizonBottomSheet(
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            const Text('Pourquoi cette route ?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                                            const SizedBox(height: 10),
-                                            Text(selected.headline, style: const TextStyle(fontWeight: FontWeight.w700)),
-                                            if (selected.caveat != null) ...[
-                                              const SizedBox(height: 6),
-                                              Text(selected.caveat!, style: TextStyle(fontSize: 12, color: muted)),
-                                            ],
-                                            if (selected.metrics.avgConfidence > 0) ...[
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                'Fiabilité : ${mapProvider.confidenceLabel(selected.metrics.avgConfidence)} (confiance ${(selected.metrics.avgConfidence * 100).round()}%)',
-                                                style: TextStyle(fontSize: 12, color: muted),
-                                              ),
-                                            ],
-                                            const SizedBox(height: 12),
-                                            if (selected.factors.isEmpty)
-                                              Text('Aucun facteur dominant détecté.', style: TextStyle(color: muted))
-                                            else
-                                              ...selected.factors.map((f) {
-                                                return Padding(
-                                                  padding: const EdgeInsets.only(bottom: 8),
-                                                  child: Row(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Container(
-                                                        width: 8,
-                                                        height: 8,
-                                                        margin: const EdgeInsets.only(top: 6),
-                                                        decoration: BoxDecoration(
-                                                          color: theme.colorScheme.primary.withOpacity(0.65),
-                                                          shape: BoxShape.circle,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 10),
-                                                      Expanded(
-                                                        child: Column(
-                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                          children: [
-                                                            Text(f.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                                                            const SizedBox(height: 2),
-                                                            Text(f.detail, style: TextStyle(fontSize: 12, color: body)),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              }),
-                                            const SizedBox(height: 12),
-                                            const Text('Comparaison rapide', style: TextStyle(fontWeight: FontWeight.w800)),
-                                            const SizedBox(height: 8),
-                                            ...entries.map((e) {
-                                              final ex = e.value;
-                                              final label = e.key == RouteVariantKind.fast
-                                                  ? 'Rapide'
-                                                  : (e.key == RouteVariantKind.safe
-                                                      ? 'Sûre'
-                                                      : (e.key == RouteVariantKind.scenic ? 'Calme' : 'GPX'));
-                                              final selectedMark = e.key == mapProvider.selectedVariant ? ' • sélectionnée' : '';
-                                              return Padding(
-                                                padding: const EdgeInsets.only(bottom: 6),
-                                                child: Text(
-                                                  '$label$selectedMark — vent ${_msToKmh(ex.metrics.avgWind).toStringAsFixed(0)} km/h, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
-                                                  style: TextStyle(fontSize: 12, color: body),
+                                      return Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: -0.2,
+                                                  color: onSurfaceStrong,
                                                 ),
-                                              );
-                                            }),
-                                            const SizedBox(height: 14),
-                                            const Text('Comparer départs', style: TextStyle(fontWeight: FontWeight.w800)),
-                                            const SizedBox(height: 8),
-                                            FutureBuilder(
-                                              future: mapProvider.compareDeparturesForSelectedVariant(),
-                                              builder: (context, snap) {
-                                                final data = snap.data;
-                                                if (snap.connectionState != ConnectionState.done) {
-                                                  return const Padding(
-                                                    padding: EdgeInsets.symmetric(vertical: 10),
-                                                    child: LinearProgressIndicator(minHeight: 3),
-                                                  );
-                                                }
-                                                if (data == null || data.isEmpty) {
-                                                  return Text('Indisponible.', style: TextStyle(fontSize: 12, color: muted));
-                                                }
-
-                                                  RouteDepartureComparison best = data.first;
-                                                  double bestScore = -999;
-                                                  for (final c in data) {
-                                                    final score = c.avgComfort - (c.rainKm * 0.35);
-                                                    if (score > bestScore) {
-                                                      bestScore = score;
-                                                      best = c;
-                                                    }
-                                                  }
-
-                                                  String labelFor(Duration d) {
-                                                    if (d == Duration.zero) return 'T0';
-                                                    final m = d.inMinutes;
-                                                    return 'T+$m';
-                                                  }
-
-                                                  String windLabel(String k) {
-                                                    if (k == 'head') return 'face';
-                                                    if (k == 'tail') return 'dos';
-                                                    return 'latéral';
-                                                  }
-
-                                                  return Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      ...data.map((c) {
-                                                        final conf = (c.avgConfidence * 100).round();
-                                                        return Padding(
-                                                          padding: const EdgeInsets.only(bottom: 6),
-                                                          child: Text(
-                                                            '${labelFor(c.offset)} — confort ${c.avgComfort.toStringAsFixed(1)}/10 (min ${c.minComfort.toStringAsFixed(1)}), pluie ~${c.rainKm.toStringAsFixed(1)} km, vent ${windLabel(c.dominantWind.name)}, conf $conf%',
-                                                            style: TextStyle(fontSize: 12, color: body),
-                                                          ),
-                                                        );
-                                                      }),
-                                                      const SizedBox(height: 6),
-                                                      Text(
-                                                        'Recommandation : ${labelFor(best.offset)} (estimé)',
-                                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: body),
-                                                      ),
-                                                    ],
-                                                  );
-                                                },
-                                              ),
-                                              const SizedBox(height: 10),
-                                              FutureBuilder(
-                                                future: mapProvider.recommendDepartureWindowForSelectedVariant(),
-                                                builder: (context, snap) {
-                                                  final rec = snap.data;
-                                                  if (snap.connectionState != ConnectionState.done) {
-                                                    return const SizedBox.shrink();
-                                                  }
-                                                  if (rec == null) return const SizedBox.shrink();
-
-                                                  final when = DateTime.now().add(rec.bestOffset);
-                                                  final hh = when.hour.toString().padLeft(2, '0');
-                                                  final mm = when.minute.toString().padLeft(2, '0');
-                                                  return Text(
-                                                    'Fenêtre optimale : $hh:$mm (${rec.rationale})',
-                                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-                                                  );
-                                                },
-                                              ),
-                                            ],
                                           ),
-                                        ),
+                                          if (subtitle != null)
+                                            Text(
+                                              subtitle,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                    color: onSurfaceMuted,
+                                                  ),
+                                            ),
+                                        ],
                                       );
                                     },
-                                  );
-                                },
-                                child: Text(
-                                  'Pourquoi ?'.toUpperCase(),
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFF4A90A0)),
+                                  ),
                                 ),
+                                if (mapProvider.routeVariants.isNotEmpty) ...[
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: () => mapProvider.clearRoute(),
+                                    child: Tooltip(
+                                      message: 'Effacer l’itinéraire',
+                                      child: Semantics(
+                                        button: true,
+                                        label: 'Effacer l’itinéraire',
+                                        child: Icon(
+                                          Icons.close_rounded,
+                                          size: 18,
+                                          color: onSurfaceMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  InkWell(
+                                    onTap: () async {
+                                      final selected = mapProvider.currentRouteExplanation;
+                                      if (selected == null) return;
+                                      final all = mapProvider.routeExplanations;
+                                      await showModalBottomSheet<void>(
+                                        context: context,
+                                        showDragHandle: false,
+                                        builder: (ctx) {
+                                          final theme = Theme.of(ctx);
+                                          final entries = all.entries.toList();
+                                          entries.sort((a, b) => a.key.index.compareTo(b.key.index));
+
+                                          final scheme = theme.colorScheme;
+                                          final muted = scheme.onSurface.withOpacity(0.60);
+                                          final body = scheme.onSurface.withOpacity(0.88);
+                                          final textTheme = theme.textTheme;
+
+                                          return HorizonBottomSheet(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Pourquoi cette route ?',
+                                                  style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                                                ),
+                                                const SizedBox(height: 10),
+                                                Text(
+                                                  selected.headline,
+                                                  style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                                                ),
+                                                if (selected.caveat != null) ...[
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    selected.caveat!,
+                                                    style: textTheme.bodySmall?.copyWith(color: muted),
+                                                  ),
+                                                ],
+                                                if (selected.metrics.avgConfidence > 0) ...[
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    'Fiabilité : ${mapProvider.confidenceLabel(selected.metrics.avgConfidence)} (confiance ${(selected.metrics.avgConfidence * 100).round()}%)',
+                                                    style: textTheme.bodySmall?.copyWith(color: muted),
+                                                  ),
+                                                ],
+                                                const SizedBox(height: 12),
+                                                if (selected.factors.isEmpty)
+                                                  Text('Aucun facteur dominant détecté.', style: textTheme.bodySmall?.copyWith(color: muted))
+                                                else
+                                                  ...selected.factors.map((f) {
+                                                    return Padding(
+                                                      padding: const EdgeInsets.only(bottom: 8),
+                                                      child: Row(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Container(
+                                                            width: 8,
+                                                            height: 8,
+                                                            margin: const EdgeInsets.only(top: 6),
+                                                            decoration: BoxDecoration(
+                                                              color: theme.colorScheme.primary.withOpacity(0.65),
+                                                              shape: BoxShape.circle,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 10),
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                                              children: [
+                                                                Text(
+                                                                  f.title,
+                                                                  style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+                                                                ),
+                                                                const SizedBox(height: 2),
+                                                                Text(
+                                                                  f.detail,
+                                                                  style: textTheme.bodySmall?.copyWith(color: body),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    );
+                                                  }),
+                                                const SizedBox(height: 12),
+                                                Text(
+                                                  'Comparaison rapide',
+                                                  style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                ...entries.map((e) {
+                                                  final ex = e.value;
+                                                  final label = e.key == RouteVariantKind.fast
+                                                      ? 'Rapide'
+                                                      : (e.key == RouteVariantKind.safe
+                                                          ? 'Sûre'
+                                                          : (e.key == RouteVariantKind.scenic ? 'Calme' : 'GPX'));
+                                                  final selectedMark = e.key == mapProvider.selectedVariant ? ' • sélectionnée' : '';
+                                                  return Padding(
+                                                    padding: const EdgeInsets.only(bottom: 6),
+                                                    child: Text(
+                                                      '$label$selectedMark — vent ${_msToKmh(ex.metrics.avgWind).toStringAsFixed(0)} km/h, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
+                                                      style: textTheme.bodySmall?.copyWith(color: body),
+                                                    ),
+                                                  );
+                                                }),
+                                                const SizedBox(height: 14),
+                                                Text(
+                                                  'Comparer départs',
+                                                  style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                FutureBuilder(
+                                                  future: mapProvider.compareDeparturesForSelectedVariant(),
+                                                  builder: (context, snap) {
+                                                    final data = snap.data;
+                                                    if (snap.connectionState != ConnectionState.done) {
+                                                      return const Padding(
+                                                        padding: EdgeInsets.symmetric(vertical: 10),
+                                                        child: LinearProgressIndicator(minHeight: 3),
+                                                      );
+                                                    }
+                                                    if (data == null || data.isEmpty) {
+                                                      return Text('Indisponible.', style: textTheme.bodySmall?.copyWith(color: muted));
+                                                    }
+
+                                                      RouteDepartureComparison best = data.first;
+                                                      double bestScore = -999;
+                                                      for (final c in data) {
+                                                        final score = c.avgComfort - (c.rainKm * 0.35);
+                                                        if (score > bestScore) {
+                                                          bestScore = score;
+                                                          best = c;
+                                                        }
+                                                      }
+
+                                                      String labelFor(Duration d) {
+                                                        if (d == Duration.zero) return 'T0';
+                                                        final m = d.inMinutes;
+                                                        return 'T+$m';
+                                                      }
+
+                                                      String windLabel(String k) {
+                                                        if (k == 'head') return 'face';
+                                                        if (k == 'tail') return 'dos';
+                                                        return 'latéral';
+                                                      }
+
+                                                      return Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          ...data.map((c) {
+                                                            final conf = (c.avgConfidence * 100).round();
+                                                            return Padding(
+                                                              padding: const EdgeInsets.only(bottom: 6),
+                                                              child: Text(
+                                                                '${labelFor(c.offset)} — confort ${c.avgComfort.toStringAsFixed(1)}/10 (min ${c.minComfort.toStringAsFixed(1)}), pluie ~${c.rainKm.toStringAsFixed(1)} km, vent ${windLabel(c.dominantWind.name)}, conf $conf%',
+                                                                style: textTheme.bodySmall?.copyWith(color: body),
+                                                              ),
+                                                            );
+                                                          }),
+                                                          const SizedBox(height: 6),
+                                                          Text(
+                                                            'Recommandation : ${labelFor(best.offset)} (estimé)',
+                                                            style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800, color: body),
+                                                          ),
+                                                        ],
+                                                      );
+                                                    },
+                                                  ),
+                                                  const SizedBox(height: 10),
+                                                  FutureBuilder(
+                                                    future: mapProvider.recommendDepartureWindowForSelectedVariant(),
+                                                    builder: (context, snap) {
+                                                      final rec = snap.data;
+                                                      if (snap.connectionState != ConnectionState.done) {
+                                                        return const SizedBox.shrink();
+                                                      }
+                                                      if (rec == null) return const SizedBox.shrink();
+
+                                                      final when = DateTime.now().add(rec.bestOffset);
+                                                      final hh = when.hour.toString().padLeft(2, '0');
+                                                      final mm = when.minute.toString().padLeft(2, '0');
+                                                      return Text(
+                                                        'Fenêtre optimale : $hh:$mm (${rec.rationale})',
+                                                        style: textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+                                                      );
+                                                    },
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                    child: Tooltip(
+                                      message: 'Pourquoi cette route ?',
+                                      child: Semantics(
+                                        button: true,
+                                        label: 'Afficher pourquoi cette route est recommandée',
+                                        child: Text(
+                                          'Pourquoi ?'.toUpperCase(),
+                                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                fontWeight: FontWeight.w900,
+                                                color: scheme.primary,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            if (mapProvider.routeVariants.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.fast))
+                                    _RouteChip(
+                                      label: 'Rapide',
+                                      selected: mapProvider.selectedVariant == RouteVariantKind.fast,
+                                      onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.fast),
+                                    ),
+                                  if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.safe))
+                                    _RouteChip(
+                                      label: 'Sûre',
+                                      selected: mapProvider.selectedVariant == RouteVariantKind.safe,
+                                      onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.safe),
+                                    ),
+                                  if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.scenic))
+                                    _RouteChip(
+                                      label: 'Calme',
+                                      selected: mapProvider.selectedVariant == RouteVariantKind.scenic,
+                                      onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.scenic),
+                                    ),
+                                  if (mapProvider.routeVariants.any((v) => v.kind == RouteVariantKind.imported))
+                                    _RouteChip(
+                                      label: 'GPX',
+                                      selected: mapProvider.selectedVariant == RouteVariantKind.imported,
+                                      onTap: () => mapProvider.selectRouteVariant(RouteVariantKind.imported),
+                                    ),
+                                ],
                               ),
                             ],
                           ],
@@ -971,7 +1042,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             decoration: _glassDecoration(),
                             child: Text(
                               mapProvider.routingError!,
-                              style: const TextStyle(fontSize: 12, color: Color(0xFF7A2D2D)),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: HorizonTokens.terracotta),
                             ),
                           ),
                         ),
@@ -995,13 +1066,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                               mapProvider.gpxImportLoading
                                   ? 'Import…'
                                   : (mapProvider.gpxImportError ?? 'Import GPX'),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: mapProvider.gpxImportError == null
-                                    ? Theme.of(context).colorScheme.onSurface.withOpacity(0.88)
-                                    : const Color(0xFF7A2D2D),
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: mapProvider.gpxImportError == null
+                                        ? onSurfaceStrong
+                                        : HorizonTokens.terracotta,
+                                  ),
                             ),
                           ),
                         ),
@@ -1023,7 +1093,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             decoration: _glassDecoration(opacity: 0.54),
                             child: Text(
                               mapProvider.routeExplanation!,
-                              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88)),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: onSurfaceStrong,
+                                  ),
                             ),
                           ),
                         ),
@@ -1036,7 +1108,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   padding: const EdgeInsets.only(bottom: 16),
                   child: FloatingActionButton.small(
                     heroTag: 'pmtiles-pack',
-                    onPressed: () {
+                    onPressed: kIsWeb
+                        ? null
+                        : () {
                       if (mapProvider.pmtilesEnabled) {
                         mapProvider.disablePmtilesPack();
                       } else {
@@ -1047,7 +1121,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                         );
                       }
                     },
-                    onLongPress: mapProvider.pmtilesEnabled
+                    onLongPress: (!kIsWeb && mapProvider.pmtilesEnabled)
                         ? () async {
                             final ok = await showDialog<bool>(
                               context: context,
@@ -1073,13 +1147,24 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             }
                           }
                         : null,
-                    child: Icon(
-                      mapProvider.pmtilesEnabled
-                          ? Icons.storage_rounded
-                          : Icons.storage_outlined,
-                      color: mapProvider.pmtilesEnabled
-                          ? Theme.of(context).colorScheme.onSurface.withOpacity(0.88)
-                          : Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
+                    child: Tooltip(
+                      message: kIsWeb
+                          ? 'Pack offline indisponible sur Web'
+                          : (mapProvider.pmtilesEnabled ? 'Désactiver le pack offline' : 'Activer le pack offline'),
+                      child: Semantics(
+                        button: true,
+                        label: kIsWeb
+                            ? 'Pack offline indisponible sur Web'
+                            : (mapProvider.pmtilesEnabled ? 'Désactiver le pack offline' : 'Activer le pack offline'),
+                        child: Icon(
+                          mapProvider.pmtilesEnabled
+                              ? Icons.storage_rounded
+                              : Icons.storage_outlined,
+                          color: mapProvider.pmtilesEnabled
+                              ? onSurfaceStrong
+                              : onSurfaceStrong,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1089,110 +1174,120 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   padding: const EdgeInsets.only(bottom: 16),
                   child: FloatingActionButton.small(
                     heroTag: 'offline-download',
-                    onPressed: () {
+                    onPressed: kIsWeb ? null : () {
                       mapProvider.downloadVisibleRegion(regionName: 'Visible region');
                     },
-                    onLongPress: () async {
+                    onLongPress: kIsWeb
+                        ? null
+                        : () async {
                       final packs = await mapProvider.listOfflinePacks();
                       if (!context.mounted) return;
 
                       await showModalBottomSheet<void>(
                         context: context,
-                        showDragHandle: true,
+                        showDragHandle: false,
                         builder: (ctx) {
-                          return SafeArea(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Packs offline',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  if (packs.isEmpty)
-                                    Text(
-                                      'Aucun pack installé.',
-                                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60)),
-                                    )
-                                  else
-                                    Flexible(
-                                      child: ListView.separated(
-                                        shrinkWrap: true,
-                                        itemCount: packs.length,
-                                        separatorBuilder: (_, __) => const Divider(height: 16),
-                                        itemBuilder: (c, i) {
-                                          final p = packs[i];
-                                          return Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      p.id,
-                                                      maxLines: 2,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: const TextStyle(fontWeight: FontWeight.w700),
+                          final theme = Theme.of(ctx);
+                          final scheme = theme.colorScheme;
+                          final onSurfaceMuted = scheme.onSurface.withOpacity(0.60);
+                          return HorizonBottomSheet(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Packs offline',
+                                  style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 12),
+                                if (packs.isEmpty)
+                                  Text(
+                                    'Aucun pack installé.',
+                                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                                          color: onSurfaceMuted,
+                                        ),
+                                  )
+                                else
+                                  Flexible(
+                                    child: ListView.separated(
+                                      shrinkWrap: true,
+                                      itemCount: packs.length,
+                                      separatorBuilder: (_, __) => const Divider(height: 16),
+                                      itemBuilder: (c, i) {
+                                        final p = packs[i];
+                                        return Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    p.id,
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    '${p.type.name} • ${_formatBytes(p.sizeBytes)}',
+                                                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                                                      color: onSurfaceMuted,
                                                     ),
-                                                    const SizedBox(height: 4),
-                                                    Text(
-                                                      '${p.type.name} • ${_formatBytes(p.sizeBytes)}',
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
+                                                  ),
+                                                ],
                                               ),
-                                              const SizedBox(width: 12),
-                                              IconButton(
-                                                onPressed: () async {
-                                                  final ok = await showDialog<bool>(
-                                                    context: ctx,
-                                                    builder: (dctx) {
-                                                      return AlertDialog(
-                                                        title: const Text('Supprimer ce pack ?'),
-                                                        content: Text(p.id),
-                                                        actions: [
-                                                          TextButton(
-                                                            onPressed: () => Navigator.of(dctx).pop(false),
-                                                            child: const Text('Annuler'),
-                                                          ),
-                                                          TextButton(
-                                                            onPressed: () => Navigator.of(dctx).pop(true),
-                                                            child: const Text('Supprimer'),
-                                                          ),
-                                                        ],
-                                                      );
-                                                    },
-                                                  );
-                                                  if (ok == true) {
-                                                    await mapProvider.uninstallOfflinePackById(p.id);
-                                                    if (ctx.mounted) Navigator.of(ctx).pop();
-                                                  }
-                                                },
-                                                icon: const Icon(Icons.delete_outline_rounded),
-                                              ),
-                                            ],
-                                          );
-                                        },
-                                      ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            IconButton(
+                                              onPressed: () async {
+                                                final ok = await showDialog<bool>(
+                                                  context: ctx,
+                                                  builder: (dctx) {
+                                                    return AlertDialog(
+                                                      title: const Text('Supprimer ce pack ?'),
+                                                      content: Text(p.id),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () => Navigator.of(dctx).pop(false),
+                                                          child: const Text('Annuler'),
+                                                        ),
+                                                        TextButton(
+                                                          onPressed: () => Navigator.of(dctx).pop(true),
+                                                          child: const Text('Supprimer'),
+                                                        ),
+                                                      ],
+                                                    );
+                                                  },
+                                                );
+                                                if (ok == true) {
+                                                  await mapProvider.uninstallOfflinePackById(p.id);
+                                                  if (ctx.mounted) Navigator.of(ctx).pop();
+                                                }
+                                              },
+                                              icon: const Icon(Icons.delete_outline_rounded),
+                                            ),
+                                          ],
+                                        );
+                                      },
                                     ),
-                                ],
-                              ),
+                                  ),
+                              ],
                             ),
                           );
                         },
                       );
                     },
-                    child: Icon(
-                      Icons.download_for_offline_outlined,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
+                    child: Tooltip(
+                      message: kIsWeb ? 'Offline indisponible sur Web' : 'Télécharger la région visible',
+                      child: Semantics(
+                        button: true,
+                        label: kIsWeb ? 'Offline indisponible sur Web' : 'Télécharger la région visible',
+                        child: Icon(
+                          Icons.cloud_download_outlined,
+                          color: onSurfaceStrong,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1204,7 +1299,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     onPressed: () {
                       _recenterOnUser(mapProvider);
                     },
-                    child: const Icon(Icons.my_location, color: Colors.blueAccent),
+                    child: Tooltip(
+                      message: 'Me localiser',
+                      child: Semantics(
+                        button: true,
+                        label: 'Recentrer la carte sur ma position',
+                        child: Icon(Icons.my_location, color: scheme.primary),
+                      ),
+                    ),
                   ),
                 ),
 
@@ -1213,12 +1315,26 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   padding: const EdgeInsets.only(bottom: 16),
                   child: FloatingActionButton.small(
                     heroTag: 'gpx-import',
-                    onPressed: () {
-                      mapProvider.importGpxRoute();
+                    onPressed: () async {
+                      try {
+                        await mapProvider.importGpxRoute();
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Import GPX indisponible (permission/fichier).')),
+                        );
+                      }
                     },
-                    child: Icon(
-                      Icons.upload_file_rounded,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.88),
+                    child: Tooltip(
+                      message: 'Importer un GPX',
+                      child: Semantics(
+                        button: true,
+                        label: 'Importer un itinéraire GPX',
+                        child: Icon(
+                          Icons.upload_file_rounded,
+                          color: onSurfaceStrong,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1233,48 +1349,49 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: _glassDecoration(),
                       child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            "Maintenant",
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.70),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Maintenant",
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: onSurfaceHint,
+                                ),
+                              ),
+                              Text(
+                                "+${mapProvider.timeOffset.toInt()}h",
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                "+24h",
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: onSurfaceSubtle,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 2,
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                              activeTrackColor: scheme.primary,
+                              inactiveTrackColor: scheme.primary.withOpacity(0.25),
+                              thumbColor: scheme.primary,
+                            ),
+                            child: Slider(
+                              value: mapProvider.timeOffset,
+                              min: 0,
+                              max: 24,
+                              onChanged: (val) => mapProvider.setTimeOffset(val),
                             ),
                           ),
-                          Text(
-                            "+${mapProvider.timeOffset.toInt()}h",
-                            style: const TextStyle(fontSize: 10, color: Color(0xFF4A90A0), fontWeight: FontWeight.w700),
-                          ),
-                          Text(
-                            "+24h",
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 2,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                          activeTrackColor: const Color(0xFF4A90A0),
-                          inactiveTrackColor: const Color(0xFF4A90A0).withOpacity(0.25),
-                          thumbColor: const Color(0xFF4A90A0),
-                        ),
-                        child: Slider(
-                          value: mapProvider.timeOffset,
-                          min: 0,
-                          max: 24,
-                          onChanged: (val) => mapProvider.setTimeOffset(val),
-                        ),
-                      ),
                         ],
                       ),
                     ),
@@ -1288,13 +1405,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   child: TextField(
                     decoration: InputDecoration(
                       hintText: "Où allez-vous ?",
-                      hintStyle: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
-                        fontSize: 16,
+                      hintStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: onSurfaceSubtle,
                       ),
                       prefixIcon: Icon(
                         Icons.search,
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.60),
+                        color: onSurfaceMuted,
                       ),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -1334,31 +1450,30 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                                   mapProvider.pmtilesError!,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
                                 )
                               : mapProvider.offlineDownloadError != null
                                   ? Text(
                                       mapProvider.offlineDownloadError!,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
                                     )
                                   : Column(
                                       mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           mapProvider.pmtilesProgress != null
                                               ? 'Activation pack offline…'
                                               : 'Téléchargement offline…',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
                                         ),
                                         const SizedBox(height: 6),
                                         LinearProgressIndicator(
                                           value: mapProvider.pmtilesProgress ?? mapProvider.offlineDownloadProgress,
                                           minHeight: 3,
-                                          color: const Color(0xFF4A90A0),
-                                          backgroundColor: const Color(0xFF4A90A0).withOpacity(0.18),
+                                          color: scheme.primary,
+                                          backgroundColor: scheme.primary.withOpacity(0.18),
                                         ),
                                       ],
                                     ),
@@ -1371,7 +1486,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                             mapProvider.clearOfflineDownloadState();
                             mapProvider.clearPmtilesState();
                           },
-                          icon: const Icon(Icons.close, size: 18),
+                          icon: Tooltip(
+                            message: 'Fermer',
+                            child: Semantics(
+                              button: true,
+                              label: 'Fermer l’état de téléchargement offline',
+                              child: const Icon(Icons.close, size: 18),
+                            ),
+                          ),
                           visualDensity: VisualDensity.compact,
                         ),
                       ],

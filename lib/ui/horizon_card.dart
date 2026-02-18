@@ -23,6 +23,7 @@ class HorizonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final shape = theme.cardTheme.shape ?? RoundedRectangleBorder(borderRadius: BorderRadius.circular(22));
     final color = theme.cardTheme.color ?? theme.colorScheme.surface;
 
@@ -34,7 +35,7 @@ class HorizonCard extends StatelessWidget {
         color: color,
         shadows: [
           BoxShadow(
-            color: Colors.black.withOpacity(theme.brightness == Brightness.dark ? 0.28 : 0.06),
+            color: scheme.shadow.withOpacity(theme.brightness == Brightness.dark ? 0.28 : 0.06),
             blurRadius: 30,
             offset: const Offset(0, 12),
           ),
@@ -56,7 +57,7 @@ class HorizonCard extends StatelessWidget {
     if (onTap == null) return clipped;
 
     return Material(
-      color: Colors.transparent,
+      color: scheme.surface.withOpacity(0),
       child: InkWell(
         customBorder: shape,
         onTap: onTap,

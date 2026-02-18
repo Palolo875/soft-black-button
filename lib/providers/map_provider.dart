@@ -27,6 +27,7 @@ import 'package:app/services/notification_settings_store.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;
+  LatLng? _webCenter;
   bool _isStyleLoaded = false;
   final WeatherService _weatherService = WeatherService();
   final WeatherEngineSota _weatherEngine = WeatherEngineSota();
@@ -97,6 +98,7 @@ class MapProvider with ChangeNotifier {
   bool _expertCloudLayer = false;
 
   MaplibreMapController? get mapController => _mapController;
+  LatLng? get webCenter => _webCenter;
   bool get isStyleLoaded => _isStyleLoaded;
   WeatherDecision? get weatherDecision => _weatherDecision;
   bool get weatherLoading => _weatherLoading;
@@ -614,7 +616,7 @@ class MapProvider with ChangeNotifier {
   void setStyleLoaded(bool loaded) {
     _isStyleLoaded = loaded;
     notifyListeners();
-    if (loaded) {
+    if (loaded && _mapController != null) {
       _weatherService.initWeather(controller: _mapController!);
       _startWeatherAutoRefresh();
       _startConnectivityMonitor();
@@ -750,10 +752,9 @@ class MapProvider with ChangeNotifier {
   }
 
   Future<void> computeRouteVariants() async {
-    final controller = _mapController;
     final start = _routeStart;
     final end = _routeEnd;
-    if (controller == null || start == null || end == null) return;
+    if (start == null || end == null) return;
     if (!_isStyleLoaded) return;
 
     final now = DateTime.now();
@@ -1463,11 +1464,17 @@ class MapProvider with ChangeNotifier {
   }
 
   void centerOnUser(LatLng position) {
+    if (kIsWeb) {
+      _webCenter = position;
+      notifyListeners();
+      return;
+    }
     _mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(position, 14.0),
     );
     unawaited(refreshWeatherAt(position, userInitiated: true));
   }
+
 }
 
 class _DepartureCompareCacheEntry {

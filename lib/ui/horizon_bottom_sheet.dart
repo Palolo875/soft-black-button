@@ -33,7 +33,7 @@ class HorizonBottomSheet extends StatelessWidget {
                 height: 5,
                 decoration: ShapeDecoration(
                   shape: const StadiumBorder(),
-                  color: theme.colorScheme.onSurface.withOpacity(theme.brightness == Brightness.dark ? 0.18 : 0.14),
+                  color: theme.colorScheme.onSurface.withOpacity(theme.brightness == Brightness.dark ? 0.16 : 0.12),
                 ),
               ),
             if (showHandle) const SizedBox(height: 12),

@@ -32,8 +32,8 @@ class HorizonChip extends StatelessWidget {
     final bg = selected ? (chipTheme.selectedColor ?? colorScheme.surface) : (chipTheme.backgroundColor ?? colorScheme.surface);
 
     final side = selected
-        ? BorderSide(color: colorScheme.primary.withOpacity(theme.brightness == Brightness.dark ? 0.55 : 0.40), width: 1)
-        : BorderSide(color: colorScheme.outlineVariant.withOpacity(theme.brightness == Brightness.dark ? 0.55 : 0.35), width: 1);
+        ? BorderSide(color: colorScheme.primary.withOpacity(theme.brightness == Brightness.dark ? 0.45 : 0.34), width: 1)
+        : BorderSide(color: colorScheme.outlineVariant.withOpacity(theme.brightness == Brightness.dark ? 0.45 : 0.30), width: 1);
 
     final effectiveShape = shape is OutlinedBorder ? shape.copyWith(side: side) : shape;
 

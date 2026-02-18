@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class HorizonTokens {
-  static const Color seed = Color(0xFFABC9D3);
+  static const Color seed = Color(0xFF7E9B83);
   static const double radius = 22.0;
 
   static const double space2 = 2;
@@ -22,8 +22,13 @@ class HorizonTokens {
   static const double elevation3 = 3;
   static const double elevation4 = 4;
 
-  static const Color bgLight = Color(0xFFF6F7F8);
-  static const Color surfaceLight = Colors.white;
+  static const Color sage = Color(0xFF7E9B83);
+  static const Color sand = Color(0xFFD8B07A);
+  static const Color terracotta = Color(0xFFB86A5B);
+  static const Color charcoal = Color(0xFF151A1E);
+
+  static const Color bgLight = Color(0xFFF3F2EE);
+  static const Color surfaceLight = Color(0xFFFAF9F6);
 
   static const Color bgDark = Color(0xFF0C1217);
   static const Color surfaceDark = Color(0xFF141C22);
@@ -50,11 +55,44 @@ class HorizonTheme {
       brightness: Brightness.light,
     );
 
+    final textTheme = _textTheme(scheme);
+
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      textTheme: _textTheme(scheme),
+      textTheme: textTheme,
       scaffoldBackgroundColor: HorizonTokens.bgLight,
+      tooltipTheme: TooltipThemeData(
+        textStyle: textTheme.bodySmall?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w700),
+        decoration: ShapeDecoration(
+          color: HorizonTokens.surfaceLight.withOpacity(0.96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+            side: BorderSide(color: scheme.outlineVariant.withOpacity(0.35), width: 1),
+          ),
+          shadows: [
+            BoxShadow(
+              color: scheme.shadow.withOpacity(0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        backgroundColor: HorizonTokens.surfaceLight.withOpacity(0.96),
+        contentTextStyle: textTheme.bodySmall?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(HorizonTokens.radius)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        showDragHandle: false,
+        backgroundColor: scheme.surface.withOpacity(0),
+        modalBackgroundColor: scheme.surface.withOpacity(0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(HorizonTokens.radius)),
+      ),
       chipTheme: ChipThemeData(
         backgroundColor: HorizonTokens.surfaceLight.withOpacity(0.70),
         selectedColor: HorizonTokens.surfaceLight.withOpacity(0.92),
@@ -106,11 +144,44 @@ class HorizonTheme {
       brightness: Brightness.dark,
     );
 
+    final textTheme = _textTheme(scheme);
+
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      textTheme: _textTheme(scheme),
+      textTheme: textTheme,
       scaffoldBackgroundColor: HorizonTokens.bgDark,
+      tooltipTheme: TooltipThemeData(
+        textStyle: textTheme.bodySmall?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w700),
+        decoration: ShapeDecoration(
+          color: HorizonTokens.surfaceDark.withOpacity(0.96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+            side: BorderSide(color: scheme.outlineVariant.withOpacity(0.35), width: 1),
+          ),
+          shadows: [
+            BoxShadow(
+              color: scheme.shadow.withOpacity(0.22),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        backgroundColor: HorizonTokens.surfaceDark.withOpacity(0.96),
+        contentTextStyle: textTheme.bodySmall?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(HorizonTokens.radius)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        showDragHandle: false,
+        backgroundColor: scheme.surface.withOpacity(0),
+        modalBackgroundColor: scheme.surface.withOpacity(0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(HorizonTokens.radius)),
+      ),
       chipTheme: ChipThemeData(
         backgroundColor: HorizonTokens.surfaceDark.withOpacity(0.65),
         selectedColor: HorizonTokens.surfaceDark.withOpacity(0.92),
