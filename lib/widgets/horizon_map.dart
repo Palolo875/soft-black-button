@@ -8,6 +8,9 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
 import 'package:app/providers/map_provider.dart';
+import 'package:app/providers/location_provider.dart';
+import 'package:app/providers/weather_provider.dart';
+import 'package:app/providers/routing_provider.dart';
 
 class HorizonMap extends StatefulWidget {
   final void Function(MaplibreMapController)? onMapCreated;
@@ -29,10 +32,15 @@ class _HorizonMapState extends State<HorizonMap> {
       _styleFuture = rootBundle.loadString('assets/styles/horizon_style.json');
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final p = Provider.of<MapProvider>(context, listen: false);
-      unawaited(p.ensureLocationPermission());
+      final loc = Provider.of<LocationProvider>(context, listen: false);
+      unawaited(loc.ensurePermission());
       if (kIsWeb) {
+        final p = Provider.of<MapProvider>(context, listen: false);
+        final w = Provider.of<WeatherProvider>(context, listen: false);
+        final r = Provider.of<RoutingProvider>(context, listen: false);
         p.setStyleLoaded(true);
+        w.setStyleLoaded(true);
+        r.setStyleLoaded(true);
       }
     });
   }
@@ -51,7 +59,7 @@ class _HorizonMapState extends State<HorizonMap> {
 
   @override
   Widget build(BuildContext context) {
-    final granted = context.select<MapProvider, bool>((p) => p.locationPermissionGranted);
+    final granted = context.select<LocationProvider, bool>((p) => p.permissionGranted);
 
     if (kIsWeb) {
       final start = context.select<MapProvider, LatLng?>((p) => p.routeStart);
@@ -124,10 +132,11 @@ class _HorizonMapState extends State<HorizonMap> {
           initialCenter: const ll.LatLng(48.8566, 2.3522),
           initialZoom: 11.0,
           onTap: (tapPosition, latLng) {
-            Provider.of<MapProvider>(context, listen: false).onMapTap(LatLng(latLng.latitude, latLng.longitude));
+            Provider.of<RoutingProvider>(context, listen: false).onMapTap(LatLng(latLng.latitude, latLng.longitude));
           },
           onLongPress: (tapPosition, latLng) {
-            Provider.of<MapProvider>(context, listen: false).setRoutePoint(LatLng(latLng.latitude, latLng.longitude));
+            Provider.of<RoutingProvider>(context, listen: false)
+                .setRoutePoint(LatLng(latLng.latitude, latLng.longitude));
           },
         ),
         children: [
@@ -169,12 +178,14 @@ class _HorizonMapState extends State<HorizonMap> {
           onStyleLoadedCallback: () {
             debugPrint("Style loaded successfully");
             Provider.of<MapProvider>(context, listen: false).setStyleLoaded(true);
+            Provider.of<WeatherProvider>(context, listen: false).setStyleLoaded(true);
+            Provider.of<RoutingProvider>(context, listen: false).setStyleLoaded(true);
           },
           onMapLongClick: (point, latLng) {
-            Provider.of<MapProvider>(context, listen: false).setRoutePoint(latLng);
+            Provider.of<RoutingProvider>(context, listen: false).setRoutePoint(latLng);
           },
           onMapClick: (point, latLng) {
-            Provider.of<MapProvider>(context, listen: false).onMapTap(latLng);
+            Provider.of<RoutingProvider>(context, listen: false).onMapTap(latLng);
           },
         );
       },

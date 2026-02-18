@@ -3,51 +3,65 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:app/services/weather_service.dart';
 import 'package:app/services/offline_service.dart';
-import 'package:app/services/weather_engine_sota.dart';
-import 'package:app/services/weather_models.dart';
 import 'package:app/services/routing_engine.dart';
 import 'package:app/services/routing_models.dart';
 import 'package:app/services/route_cache.dart';
 import 'package:app/services/offline_registry.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:app/services/explainability_engine.dart';
 import 'package:app/services/privacy_service.dart';
 import 'package:app/services/analytics_service.dart';
 import 'package:app/services/horizon_scheduler.dart';
 import 'package:app/services/perf_metrics.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:app/services/route_compare_service.dart';
 import 'package:app/services/gpx_import_service.dart';
 import 'package:app/services/route_geometry.dart';
 import 'package:app/services/route_weather_projector.dart';
 import 'package:app/services/notification_service.dart';
-import 'package:app/services/notification_settings_store.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;
   LatLng? _webCenter;
   bool _isStyleLoaded = false;
-  final WeatherService _weatherService = WeatherService();
-  final WeatherEngineSota _weatherEngine = WeatherEngineSota();
-  final RoutingEngine _routingEngine = RoutingEngine();
-  final RouteCache _routeCache = RouteCache(encrypted: true);
-  final OfflineService _offlineService = OfflineService();
-  final PrivacyService _privacyService = const PrivacyService();
-  final AnalyticsService _analytics = AnalyticsService();
-  final HorizonScheduler _scheduler = HorizonScheduler();
-  final PerfMetrics _metrics = PerfMetrics();
-  final RouteCompareService _routeCompare = RouteCompareService();
-  final GpxImportService _gpxImport = GpxImportService();
-  final RouteWeatherProjector _routeWeatherProjector = RouteWeatherProjector();
-  final NotificationService _notifications = NotificationService();
-  final NotificationSettingsStore _notificationStore = NotificationSettingsStore();
-  final ExplainabilityEngine _explainability = const ExplainabilityEngine();
-  double _timeOffset = 0.0;
+  final RoutingEngine _routingEngine;
+  final RouteCache _routeCache;
+  final OfflineService _offlineService;
+  final PrivacyService _privacyService;
+  final AnalyticsService _analytics;
+  final HorizonScheduler _scheduler;
+  final PerfMetrics _metrics;
+  final RouteCompareService _routeCompare;
+  final GpxImportService _gpxImport;
+  final RouteWeatherProjector _routeWeatherProjector;
+  final NotificationService _notifications;
+  final ExplainabilityEngine _explainability;
 
-  Timer? _weatherRefreshTimer;
-  LatLng? _lastWeatherPosition;
+  MapProvider({
+    RoutingEngine? routingEngine,
+    RouteCache? routeCache,
+    OfflineService? offlineService,
+    PrivacyService? privacyService,
+    AnalyticsService? analytics,
+    HorizonScheduler? scheduler,
+    PerfMetrics? metrics,
+    RouteCompareService? routeCompare,
+    GpxImportService? gpxImport,
+    RouteWeatherProjector? routeWeatherProjector,
+    NotificationService? notifications,
+    ExplainabilityEngine? explainability,
+  })  : _routingEngine = routingEngine ?? RoutingEngine(),
+        _routeCache = routeCache ?? RouteCache(encrypted: true),
+        _offlineService = offlineService ?? OfflineService(),
+        _privacyService = privacyService ?? const PrivacyService(),
+        _analytics = analytics ?? AnalyticsService(),
+        _scheduler = scheduler ?? HorizonScheduler(),
+        _metrics = metrics ?? PerfMetrics(),
+        _routeCompare = routeCompare ?? RouteCompareService(),
+        _gpxImport = gpxImport ?? GpxImportService(),
+        _routeWeatherProjector = routeWeatherProjector ?? RouteWeatherProjector(),
+        _notifications = notifications ?? NotificationService(),
+        _explainability = explainability ?? const ExplainabilityEngine();
+  double _timeOffset = 0.0;
 
   LatLng? _routeStart;
   LatLng? _routeEnd;
@@ -66,23 +80,12 @@ class MapProvider with ChangeNotifier {
   String? _gpxImportError;
   String? _gpxRouteName;
 
-  NotificationSettings _notificationSettings = const NotificationSettings(enabled: false);
+  bool _notificationsEnabledForContextual = false;
   DateTime? _lastNotificationAt;
-
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool? _isOnline;
 
   bool _lowPowerMode = false;
   bool _appInForeground = true;
-
-  StreamSubscription<Position>? _positionSub;
-  LatLng? _lastUserPosition;
-  double? _lastUserAccuracyMeters;
-  bool _locationPermissionGranted = false;
-
-  WeatherDecision? _weatherDecision;
-  bool _weatherLoading = false;
-  String? _weatherError;
 
   double? _offlineDownloadProgress;
   String? _offlineDownloadError;
@@ -92,17 +95,9 @@ class MapProvider with ChangeNotifier {
   String? _pmtilesError;
   String _pmtilesFileName = 'horizon.pmtiles';
 
-  bool _expertWeatherMode = false;
-  bool _expertWindLayer = true;
-  bool _expertRainLayer = true;
-  bool _expertCloudLayer = false;
-
   MaplibreMapController? get mapController => _mapController;
   LatLng? get webCenter => _webCenter;
   bool get isStyleLoaded => _isStyleLoaded;
-  WeatherDecision? get weatherDecision => _weatherDecision;
-  bool get weatherLoading => _weatherLoading;
-  String? get weatherError => _weatherError;
   LatLng? get routeStart => _routeStart;
   LatLng? get routeEnd => _routeEnd;
   bool get routingLoading => _routingLoading;
@@ -116,7 +111,6 @@ class MapProvider with ChangeNotifier {
   bool get gpxImportLoading => _gpxImportLoading;
   String? get gpxImportError => _gpxImportError;
   String? get gpxRouteName => _gpxRouteName;
-  bool get notificationsEnabled => _notificationSettings.enabled;
   double? get offlineDownloadProgress => _offlineDownloadProgress;
   String? get offlineDownloadError => _offlineDownloadError;
   bool get pmtilesEnabled => _pmtilesEnabled;
@@ -125,14 +119,6 @@ class MapProvider with ChangeNotifier {
   String get pmtilesFileName => _pmtilesFileName;
   bool? get isOnline => _isOnline;
   bool get lowPowerMode => _lowPowerMode;
-  bool get expertWeatherMode => _expertWeatherMode;
-  bool get expertWindLayer => _expertWindLayer;
-  bool get expertRainLayer => _expertRainLayer;
-  bool get expertCloudLayer => _expertCloudLayer;
-  AnalyticsSettings get analyticsSettings => _analytics.settings;
-  LatLng? get lastUserPosition => _lastUserPosition;
-  double? get lastUserAccuracyMeters => _lastUserAccuracyMeters;
-  bool get locationPermissionGranted => _locationPermissionGranted;
 
   String confidenceLabel(double confidence) {
     if (confidence >= 0.75) return 'Fiable';
@@ -140,237 +126,16 @@ class MapProvider with ChangeNotifier {
     return 'Incertain';
   }
 
-  Future<void> _ensureExpertWeatherLayers() async {
-    final controller = _mapController;
-    if (controller == null) return;
-
-    try {
-      await controller.addSource('expert-weather', GeojsonSourceProperties(data: _emptyFeatureCollection()));
-    } catch (_) {}
-
-    try {
-      await controller.addCircleLayer(
-        'expert-weather',
-        'expert-wind-layer',
-        const CircleLayerProperties(
-          circleRadius: [
-            'interpolate',
-            ['linear'],
-            ['get', 'windKmh'],
-            0,
-            2.0,
-            25,
-            5.0,
-            55,
-            9.0,
-          ],
-          circleColor: [
-            'interpolate',
-            ['linear'],
-            ['get', 'windKmh'],
-            0,
-            '#ABC9D3',
-            25,
-            '#4A90A0',
-            55,
-            '#2E2E2E',
-          ],
-          circleOpacity: 0.55,
-          circleBlur: 0.2,
-        ),
-      );
-    } catch (_) {}
-
-    try {
-      await controller.addCircleLayer(
-        'expert-weather',
-        'expert-rain-layer',
-        const CircleLayerProperties(
-          circleRadius: [
-            'interpolate',
-            ['linear'],
-            ['get', 'rainMmH'],
-            0,
-            1.0,
-            1,
-            4.0,
-            5,
-            9.0,
-          ],
-          circleColor: [
-            'interpolate',
-            ['linear'],
-            ['get', 'rainMmH'],
-            0,
-            '#ffffff',
-            1,
-            '#5AA6B5',
-            5,
-            '#2B4C9A',
-          ],
-          circleOpacity: 0.42,
-          circleBlur: 0.35,
-        ),
-      );
-    } catch (_) {}
-
-    try {
-      await controller.addCircleLayer(
-        'expert-weather',
-        'expert-cloud-layer',
-        const CircleLayerProperties(
-          circleRadius: [
-            'interpolate',
-            ['linear'],
-            ['get', 'cloudPct'],
-            0,
-            2.0,
-            60,
-            6.0,
-            100,
-            10.0,
-          ],
-          circleColor: [
-            'interpolate',
-            ['linear'],
-            ['get', 'cloudPct'],
-            0,
-            '#ffffff',
-            60,
-            '#BFC7CA',
-            100,
-            '#7A7A7A',
-          ],
-          circleOpacity: 0.28,
-          circleBlur: 0.55,
-        ),
-      );
-    } catch (_) {}
-  }
-
-  Future<void> _renderExpertWeatherLayers() async {
-    final controller = _mapController;
-    if (controller == null) return;
-    if (!_isStyleLoaded) return;
-
-    if (!_expertWeatherMode) {
-      try {
-        await controller.setGeoJsonSource('expert-weather', _emptyFeatureCollection());
-      } catch (_) {}
-      return;
-    }
-
-    final variant = _currentVariant();
-    final points = <Map<String, dynamic>>[];
-
-    if (variant != null && variant.weatherSamples.isNotEmpty) {
-      for (final s in variant.weatherSamples) {
-        points.add({
-          'type': 'Feature',
-          'properties': {
-            'windKmh': s.snapshot.windSpeed * 3.6,
-            'rainMmH': s.snapshot.precipitation,
-            'cloudPct': s.snapshot.cloudCover,
-            'showWind': _expertWindLayer ? 1 : 0,
-            'showRain': _expertRainLayer ? 1 : 0,
-            'showCloud': _expertCloudLayer ? 1 : 0,
-          },
-          'geometry': {
-            'type': 'Point',
-            'coordinates': [s.location.longitude, s.location.latitude],
-          },
-        });
-      }
-    } else if (_lastWeatherPosition != null && _weatherDecision != null) {
-      final p = _lastWeatherPosition!;
-      final s = _weatherDecision!.now;
-      points.add({
-        'type': 'Feature',
-        'properties': {
-          'windKmh': s.windSpeed * 3.6,
-          'rainMmH': s.precipitation,
-          'cloudPct': s.cloudCover,
-          'showWind': _expertWindLayer ? 1 : 0,
-          'showRain': _expertRainLayer ? 1 : 0,
-          'showCloud': _expertCloudLayer ? 1 : 0,
-        },
-        'geometry': {
-          'type': 'Point',
-          'coordinates': [p.longitude, p.latitude],
-        },
-      });
-    }
-
-    // Hide via opacity when toggled off (avoid layer API differences).
-    try {
-      await controller.setGeoJsonSource('expert-weather', {
-        'type': 'FeatureCollection',
-        'features': points,
-      });
-    } catch (_) {}
-
-    try {
-      await controller.setPaintProperty('expert-wind-layer', 'circle-opacity', _expertWindLayer ? 0.55 : 0.0);
-      await controller.setPaintProperty('expert-rain-layer', 'circle-opacity', _expertRainLayer ? 0.42 : 0.0);
-      await controller.setPaintProperty('expert-cloud-layer', 'circle-opacity', _expertCloudLayer ? 0.28 : 0.0);
-    } catch (_) {}
-  }
-
-  String? get currentWeatherReliabilityLabel {
-    final c = _weatherDecision?.confidence;
-    if (c == null) return null;
-    return confidenceLabel(c);
+  void syncIsOnlineFromConnectivity(bool? isOnline) {
+    if (_isOnline == isOnline) return;
+    _isOnline = isOnline;
+    notifyListeners();
   }
 
   String? get selectedSampleReliabilityLabel {
     final c = _selectedRouteWeatherSample?.confidence;
     if (c == null) return null;
     return confidenceLabel(c);
-  }
-
-  Future<void> refreshWeatherAt(LatLng position, {bool userInitiated = true}) async {
-    _lastWeatherPosition = position;
-    _weatherLoading = true;
-    _weatherError = null;
-    notifyListeners();
-
-    final snap = SchedulerSnapshot(
-      appInForeground: _appInForeground,
-      isOnline: _isOnline ?? true,
-      lowPowerMode: _lowPowerMode,
-      navigationActive: _routeVariants.isNotEmpty,
-      speedMps: null,
-    );
-    if (!_scheduler.shouldComputeWeather(snap, userInitiated: userInitiated)) {
-      _weatherLoading = false;
-      notifyListeners();
-      return;
-    }
-
-    try {
-      final sw = Stopwatch()..start();
-      final decision = await _weatherEngine.getDecisionForPointAtTime(
-        position,
-        at: _forecastBaseUtc(),
-      );
-      sw.stop();
-      _weatherDecision = decision;
-      _weatherLoading = false;
-      notifyListeners();
-
-      _metrics.recordDuration('weather_decision_ms', sw.elapsedMilliseconds);
-      _metrics.inc('weather_refresh');
-      unawaited(_metrics.flush());
-      unawaited(_analytics.record('weather_refreshed', props: {'trigger': userInitiated ? 'user' : 'auto'}));
-    } catch (e) {
-      _weatherLoading = false;
-      _weatherError = e.toString();
-      notifyListeners();
-
-      _metrics.inc('weather_error');
-      unawaited(_metrics.flush());
-    }
-
   }
 
   Future<List<RouteDepartureComparison>> compareDeparturesForSelectedVariant() async {
@@ -431,59 +196,8 @@ class MapProvider with ChangeNotifier {
     return _analytics.exportBufferJson();
   }
 
-  Future<void> initTrustAndPerf() async {
-    await _analytics.load();
-    await _metrics.load();
-    _notificationSettings = await _notificationStore.load();
-    unawaited(_notifications.init());
-    notifyListeners();
-  }
-
-  Future<void> ensureLocationPermission() async {
-    if (kIsWeb) {
-      _locationPermissionGranted = false;
-      return;
-    }
-
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _locationPermissionGranted = false;
-      notifyListeners();
-      return;
-    }
-
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    _locationPermissionGranted =
-        permission != LocationPermission.denied && permission != LocationPermission.deniedForever;
-    notifyListeners();
-    if (_locationPermissionGranted) {
-      _startOrUpdatePositionTracking();
-    }
-  }
-
-  Future<void> setNotificationsEnabled(bool enabled) async {
-    if (enabled) {
-      final ok = await _notifications.requestPermissions();
-      if (!ok) {
-        _notificationSettings = const NotificationSettings(enabled: false);
-        await _notificationStore.save(_notificationSettings);
-        notifyListeners();
-        return;
-      }
-    }
-    _notificationSettings = NotificationSettings(enabled: enabled);
-    await _notificationStore.save(_notificationSettings);
-    notifyListeners();
-    if (enabled) {
-      unawaited(_evaluateAndNotifyContextual());
-    }
-  }
-
   Future<void> _evaluateAndNotifyContextual() async {
-    if (!_notificationSettings.enabled) return;
+    if (!_notificationsEnabledForContextual) return;
     if (kIsWeb) return;
 
     // Respect Module 7: no heavy work in background.
@@ -515,15 +229,16 @@ class MapProvider with ChangeNotifier {
     }
   }
 
-  Future<void> setAnalyticsLevel(AnalyticsLevel level) async {
-    await _analytics.setLevel(level);
-    notifyListeners();
-  }
-
   void setLowPowerMode(bool enabled) {
     _lowPowerMode = enabled;
     notifyListeners();
-    unawaited(_restartPositionTracking());
+  }
+
+  void syncNotificationsEnabledFromSettings(bool enabled) {
+    _notificationsEnabledForContextual = enabled;
+    if (enabled) {
+      unawaited(_evaluateAndNotifyContextual());
+    }
   }
 
   void setAppInForeground(bool fg) {
@@ -596,8 +311,6 @@ class MapProvider with ChangeNotifier {
   void setController(MaplibreMapController controller) {
     _mapController = controller;
     notifyListeners();
-    _startConnectivityMonitor();
-    _startOrUpdatePositionTracking();
   }
 
   double get timeOffset => _timeOffset;
@@ -609,110 +322,12 @@ class MapProvider with ChangeNotifier {
 
   void setTimeOffset(double value) {
     _timeOffset = value;
-    _weatherService.updateTimeOffset(value);
     notifyListeners();
   }
 
   void setStyleLoaded(bool loaded) {
     _isStyleLoaded = loaded;
     notifyListeners();
-    if (loaded && _mapController != null) {
-      _weatherService.initWeather(controller: _mapController!);
-      _startWeatherAutoRefresh();
-      _startConnectivityMonitor();
-      unawaited(_ensureExpertWeatherLayers());
-    }
-  }
-
-  void setExpertWeatherMode(bool enabled) {
-    _expertWeatherMode = enabled;
-    notifyListeners();
-    unawaited(_renderExpertWeatherLayers());
-  }
-
-  void setExpertWindLayer(bool enabled) {
-    _expertWindLayer = enabled;
-    notifyListeners();
-    unawaited(_renderExpertWeatherLayers());
-  }
-
-  void setExpertRainLayer(bool enabled) {
-    _expertRainLayer = enabled;
-    notifyListeners();
-    unawaited(_renderExpertWeatherLayers());
-  }
-
-  void setExpertCloudLayer(bool enabled) {
-    _expertCloudLayer = enabled;
-    notifyListeners();
-    unawaited(_renderExpertWeatherLayers());
-  }
-
-  LocationSettings _locationSettingsForCurrentMode() {
-    final navigationActive = _routeVariants.isNotEmpty;
-    if (_lowPowerMode) {
-      return const LocationSettings(
-        accuracy: LocationAccuracy.low,
-        distanceFilter: 120,
-      );
-    }
-    if (navigationActive) {
-      return const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 12,
-      );
-    }
-    return const LocationSettings(
-      accuracy: LocationAccuracy.medium,
-      distanceFilter: 40,
-    );
-  }
-
-  void _startOrUpdatePositionTracking() {
-    if (kIsWeb) return;
-    if (_positionSub != null) return;
-
-    if (!_locationPermissionGranted) return;
-
-    unawaited(() async {
-      _positionSub = Geolocator.getPositionStream(locationSettings: _locationSettingsForCurrentMode()).listen(
-        (p) {
-          _lastUserPosition = LatLng(p.latitude, p.longitude);
-          _lastUserAccuracyMeters = p.accuracy;
-
-          // In background we only keep last fix; no heavy work.
-          if (!_appInForeground) return;
-
-          // Optional light refresh: do not spam.
-          // Weather refresh is user-initiated elsewhere; scheduler gating is handled there.
-        },
-        onError: (_) {},
-      );
-    }());
-  }
-
-  Future<void> _restartPositionTracking() async {
-    await _positionSub?.cancel();
-    _positionSub = null;
-    _startOrUpdatePositionTracking();
-  }
-
-  void _startConnectivityMonitor() {
-    _connectivitySub ??= Connectivity().onConnectivityChanged.listen((results) {
-      final has = results.isNotEmpty && !results.contains(ConnectivityResult.none);
-      final next = has ? true : false;
-      if (_isOnline == next) return;
-      _isOnline = next;
-      notifyListeners();
-    });
-    unawaited(() async {
-      final results = await Connectivity().checkConnectivity();
-      final has = results.isNotEmpty && !results.contains(ConnectivityResult.none);
-      final next = has ? true : false;
-      if (_isOnline == next) return;
-      _isOnline = next;
-      notifyListeners();
-    }());
   }
 
   void setRoutePoint(LatLng point) {
@@ -747,8 +362,6 @@ class MapProvider with ChangeNotifier {
         unawaited(computeRouteVariants());
       }
     });
-
-    unawaited(_restartPositionTracking());
   }
 
   Future<void> computeRouteVariants() async {
@@ -923,7 +536,6 @@ class MapProvider with ChangeNotifier {
     _gpxRouteName = null;
     notifyListeners();
     await _clearRouteLayers();
-    await _restartPositionTracking();
   }
 
   Future<void> importGpxRoute() async {
@@ -1304,16 +916,6 @@ class MapProvider with ChangeNotifier {
         'features': [],
       };
 
-  void _startWeatherAutoRefresh() {
-    _weatherRefreshTimer?.cancel();
-    _weatherRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
-      final pos = _lastWeatherPosition;
-      if (pos == null) return;
-      if (!_appInForeground) return;
-      unawaited(refreshWeatherAt(pos, userInitiated: false));
-    });
-  }
-
   Future<void> enablePmtilesPack({
     required String url,
     String fileName = 'horizon.pmtiles',
@@ -1453,11 +1055,7 @@ class MapProvider with ChangeNotifier {
 
   @override
   void dispose() {
-    _weatherService.dispose();
-    _weatherRefreshTimer?.cancel();
     _routeDebounce?.cancel();
-    unawaited(_positionSub?.cancel());
-    unawaited(_connectivitySub?.cancel());
     unawaited(_offlineDownloadSub?.cancel());
     unawaited(_offlineService.stopPmtilesServer());
     super.dispose();
@@ -1472,7 +1070,6 @@ class MapProvider with ChangeNotifier {
     _mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(position, 14.0),
     );
-    unawaited(refreshWeatherAt(position, userInitiated: true));
   }
 
 }
