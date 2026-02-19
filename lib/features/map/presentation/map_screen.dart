@@ -187,90 +187,55 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             ),
           ),
 
-          // ----- Bottom controls -----
+          // ----- Bottom controls (split to avoid blocking the map hit-test area) -----
           Positioned(
             bottom: 40,
             left: edgeInset,
+            child: SafeArea(
+              top: false,
+              child: FocusTraversalGroup(
+                policy: OrderedTraversalPolicy(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: w >= HorizonBreakpoints.medium ? 640 : 340,
+                    maxHeight: MediaQuery.sizeOf(context).height * (w >= HorizonBreakpoints.medium ? 0.70 : 0.42),
+                  ),
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildRoutingControls(
+                          context, routing, offline, mapProvider,
+                          onSurfaceStrong, onSurfaceMuted, onSurfaceSubtle, scheme,
+                        ),
+                        _buildRoutingMessages(context, routing, onSurfaceStrong),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 40,
             right: edgeInset,
-            child: Builder(
-              builder: (context) {
-                // --- Routing controls panel ---
-                Widget routingControls = _buildRoutingControls(
-                  context, routing, offline, mapProvider,
-                  onSurfaceStrong, onSurfaceMuted, onSurfaceSubtle, scheme,
-                );
-
-                // --- Routing messages ---
-                Widget routingMessages = _buildRoutingMessages(
-                  context, routing, onSurfaceStrong,
-                );
-
-                // --- FAB action column ---
-                Widget actionColumn = _buildActionColumn(
-                  context, routing, offline, mapProvider,
-                  onSurfaceStrong, onSurfaceMuted, onSurfaceSubtle, scheme,
-                );
-
-                Widget compactLayout = SafeArea(
-                  top: false,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.sizeOf(context).height * 0.62,
-                    ),
-                    child: SingleChildScrollView(
-                      reverse: true,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          routingControls,
-                          routingMessages,
-                          actionColumn,
-                        ],
-                      ),
-                    ),
+            child: SafeArea(
+              top: false,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 420,
+                  maxHeight: MediaQuery.sizeOf(context).height * (w >= HorizonBreakpoints.medium ? 0.70 : 0.52),
+                ),
+                child: SingleChildScrollView(
+                  reverse: true,
+                  child: _buildActionColumn(
+                    context, routing, offline, mapProvider,
+                    onSurfaceStrong, onSurfaceMuted, onSurfaceSubtle, scheme,
                   ),
-                );
-
-                Widget expandedLayout = SafeArea(
-                  top: false,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 640),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [routingControls, routingMessages],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 420),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: MediaQuery.sizeOf(context).height * 0.70,
-                          ),
-                          child: SingleChildScrollView(
-                            reverse: true,
-                            child: actionColumn,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-
-                return FocusTraversalGroup(
-                  policy: OrderedTraversalPolicy(),
-                  child: HorizonResponsiveBuilder(
-                    compact: (_) => compactLayout,
-                    expanded: (_) => expandedLayout,
-                  ),
-                );
-              },
+                ),
+              ),
             ),
           ),
         ],
