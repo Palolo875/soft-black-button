@@ -93,7 +93,7 @@ class WeatherService {
     _timeOffset = offset;
   }
 
-  Future<void> _addOpportunities(MapLibreMapController controller) async {
+  Future<void> _addOpportunities(MaplibreMapController controller) async {
     final opportunities = {
       "type": "FeatureCollection",
       "features": [

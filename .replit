@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["flutter"]
+packages = ["jq", "unzip"]
 
 [workflows]
 runButton = "Project"
@@ -22,19 +22,18 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "dart run serve.dart"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "export PATH=\"/home/runner/flutter/bin:$PATH\" && cd /home/runner/workspace && dart run serve.dart"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [deployment]
-deploymentTarget = "autoscale"
-run = ["dart", "run", "serve.dart"]
-build = ["bash", "-c", "flutter build web --release --base-href /"]
+deploymentTarget = "static"
+publicDir = "build/web"
