@@ -22,6 +22,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Nous utilisons votre position pour centrer la carte et afficher des informations locales.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Nous utilisons votre position pour centrer la carte et afficher des informations locales.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

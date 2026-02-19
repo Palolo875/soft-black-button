@@ -1,5 +1,5 @@
-name: app
-description: "A new Flutter project."
+name: horizon
+description: "Weather-aware cycling navigation with comfort scoring, route explainability, and offline support."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.10.7
+  sdk: ^3.7.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -37,11 +37,20 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   maplibre_gl: ^0.25.0
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
   provider: ^6.1.5+1
   http: ^1.6.0
   path_provider: ^2.1.5
   geolocator: ^14.0.2
   pmtiles: ^1.3.0
+  crypto: ^3.0.3
+  connectivity_plus: ^6.1.4
+  flutter_secure_storage: ^9.2.4
+  cryptography: ^2.7.0
+  file_picker: ^8.1.7
+  xml: ^6.5.0
+  flutter_local_notifications: ^19.1.0
 
 dev_dependencies:
   flutter_test:
@@ -52,7 +61,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^6.0.0
+  flutter_lints: ^5.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

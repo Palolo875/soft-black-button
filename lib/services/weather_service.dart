@@ -25,7 +25,9 @@ class WeatherService {
   final double baseLat = 48.8566;
   final double baseLng = 2.3522;
 
-  void initWeather(MapLibreMapController controller) async {
+  Future<void> initWeather({required MaplibreMapController controller}) async {
+    _animationTimer?.cancel();
+    _particles.clear();
     // Créer les particules initiales
     for (int i = 0; i < 150; i++) {
       _particles.add(WindParticle(
