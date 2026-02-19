@@ -1,12 +1,12 @@
-# Horizon - Flutter Web Map Application
+# Horizon - Weather-Aware Cycling Navigation
 
 ## Overview
-A Flutter web application featuring an interactive map powered by MapLibre GL, weather information, offline tile support via PMTiles, and location-based features. The UI is in French.
+A Flutter web application for weather-aware cycling navigation with comfort scoring, route explainability, and offline support. Features an interactive map powered by MapLibre GL.
 
 ## Project Architecture
 - **Framework**: Flutter (Dart) targeting web
-- **Flutter SDK**: 3.29.3 (installed at `/home/runner/flutter`)
-- **Dart SDK**: 3.7.2
+- **Flutter SDK**: 3.32.0 (via nix)
+- **Dart SDK**: 3.10.4
 - **Map Engine**: MapLibre GL (via maplibre_gl package)
 - **State Management**: Provider pattern
 - **Offline Tiles**: PMTiles support
@@ -14,7 +14,7 @@ A Flutter web application featuring an interactive map powered by MapLibre GL, w
 ## Project Structure
 ```
 lib/
-  main.dart              - App entry point and main UI (MapScreen)
+  main.dart              - App entry point
   core/                  - Constants, DI, error handling, mobility models
   features/map/          - Map screen and presentation widgets
   providers/             - State management (ChangeNotifier providers)
@@ -28,32 +28,44 @@ assets/
 web/
   index.html             - Web entry point with PMTiles/MapLibre JS
 build/web/               - Built Flutter web output (served in production)
-serve.dart               - Simple Dart HTTP server for serving built app
+serve.dart               - Simple Dart HTTP server for serving built app on port 5000
 ```
 
 ## Key Dependencies
 - maplibre_gl: ^0.25.0
+- flutter_map: ^8.2.2
 - provider: ^6.1.5+1
 - http: ^1.6.0
 - path_provider: ^2.1.5
 - geolocator: ^14.0.2
 - pmtiles: ^1.3.0
+- connectivity_plus: ^7.0.0
+- flutter_secure_storage: ^10.0.0
+- flutter_local_notifications: ^20.1.0
 
 ## Build & Run
-- Build: `export PATH="/home/runner/flutter/bin:$PATH" && flutter build web --release --base-href "/"`
-- Serve: `export PATH="/home/runner/flutter/bin:$PATH" && dart run serve.dart` (port 5000)
+- Build: `flutter build web --release --base-href "/"`
+- Serve: `dart run serve.dart` (port 5000)
+- The workflow runs `dart run serve.dart` to serve the pre-built Flutter web app
 
 ## Deployment
-- Static deployment serving `build/web` directory
+- Autoscale deployment
+- Build step: `flutter build web --release --base-href /`
+- Run step: `dart run serve.dart`
+
+## Environment Variables
+- `VALHALLA_BASE_URL` - Valhalla routing server (default: https://valhalla1.openstreetmap.de)
+- `METNO_USER_AGENT` - User-Agent for Met.no API (required by their ToS)
 
 ## Recent Changes
-- 2026-02-19: Migrated to Replit environment
-  - Installed Flutter SDK 3.29.3 (pre-built archive)
-  - Downgraded SDK constraint to ^3.7.0 and flutter_lints to ^5.0.0
-  - Fixed compilation errors (missing imports, API compatibility with Dart 3.7.2)
-  - Successfully built Flutter web app
-- 2026-02-17: Initial Replit setup
-  - Installed Flutter SDK 3.41.1
-  - Fixed compilation errors (missing imports for LatLng, unawaited, updated PmTilesArchive API)
-  - Created serve.dart for static file serving on port 5000
-  - Configured static deployment
+- 2026-02-19: Full Upgrade of Dependencies & SDK
+  - Upgraded Flutter dependencies to latest major versions (flutter_map 8.2.2, connectivity_plus 7.0.0, etc.)
+  - Updated Dart SDK constraint to ^3.8.0 in pubspec.yaml
+  - Refactored `NotificationService` to support breaking changes in `flutter_local_notifications` 20.1.0
+  - Verified build and serving on port 5000
+- 2026-02-19: Set up in Replit environment
+  - Installed Dart 3.10 module and Flutter 3.32.0 via nix
+  - Fixed CardTheme -> CardThemeData API compatibility
+  - Built Flutter web app successfully
+  - Configured serve.dart workflow on port 5000
+  - Configured autoscale deployment

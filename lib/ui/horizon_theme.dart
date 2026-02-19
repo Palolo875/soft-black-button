@@ -106,7 +106,7 @@ class HorizonTheme {
           side: BorderSide(color: scheme.outlineVariant.withOpacity(0.35), width: 1),
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: HorizonTokens.surfaceLight.withOpacity(0.92),
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -195,7 +195,7 @@ class HorizonTheme {
           side: BorderSide(color: scheme.outlineVariant.withOpacity(0.35), width: 1),
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: HorizonTokens.surfaceDark.withOpacity(0.92),
         elevation: 0,
         shape: RoundedRectangleBorder(
