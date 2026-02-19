@@ -15,7 +15,6 @@ import 'package:horizon/services/weather_models.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;
-  LatLng? _webCenter;
   bool _isStyleLoaded = false;
   RoutingProvider? _routing;
   OfflineProvider? _offline;
@@ -43,7 +42,6 @@ class MapProvider with ChangeNotifier {
   List<String> _recentSearches = [];
 
   MaplibreMapController? get mapController => _mapController;
-  LatLng? get webCenter => _webCenter;
   bool get isStyleLoaded => _isStyleLoaded;
   LatLng? get routeStart => _routing?.routeStart;
   LatLng? get routeEnd => _routing?.routeEnd;
@@ -241,11 +239,6 @@ class MapProvider with ChangeNotifier {
   }
 
   void centerOnUser(LatLng position) {
-    if (kIsWeb) {
-      _webCenter = position;
-      notifyListeners();
-      return;
-    }
     _mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(position, 14.0),
     );

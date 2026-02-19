@@ -183,8 +183,18 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      body: Stack(
-        children: [
+      body: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.slash): () {
+            _searchFocusNode.requestFocus();
+          },
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            _searchFocusNode.unfocus();
+            if (mounted) setState(() => _showRecent = false);
+          },
+        },
+        child: Stack(
+          children: [
           // ----- Map -----
           HorizonMap(
             onMapCreated: (controller) {
@@ -324,6 +334,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       floatingActionButton: const OfflineProgressBar(),
     );
   }
+}
 
   // ---------------------------------------------------------------------------
   // Extracted build helpers (still in same file for access to state/context)
@@ -662,23 +673,19 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           heroTag: 'pmtiles-pack',
           order: 2,
           icon: offline.pmtilesEnabled ? Icons.storage_rounded : Icons.storage_outlined,
-          tooltip: kIsWeb
-              ? 'Pack offline indisponible sur Web'
-              : (offline.pmtilesEnabled ? 'Désactiver le pack offline' : 'Activer le pack offline'),
+          tooltip: offline.pmtilesEnabled ? 'Désactiver le pack offline' : 'Activer le pack offline',
           color: onSurfaceStrong,
-          onPressed: kIsWeb
-              ? null
-              : () {
-                  if (offline.pmtilesEnabled) {
-                    offline.disablePmtilesPack();
-                  } else {
-                    offline.enablePmtilesPack(
-                      url: 'https://r2-public.protomaps.com/protomaps-sample-datasets/cb_2018_us_zcta510_500k.pmtiles',
-                      fileName: 'horizon.pmtiles',
-                      regionNameForUi: 'Pack offline',
-                    );
-                  }
-                },
+          onPressed: () {
+            if (offline.pmtilesEnabled) {
+              offline.disablePmtilesPack();
+            } else {
+              offline.enablePmtilesPack(
+                url: 'https://r2-public.protomaps.com/protomaps-sample-datasets/cb_2018_us_zcta510_500k.pmtiles',
+                fileName: 'horizon.pmtiles',
+                regionNameForUi: 'Pack offline',
+              );
+            }
+          },
           onLongPress: (!kIsWeb && offline.pmtilesEnabled)
               ? () async {
                   final ok = await showDialog<bool>(

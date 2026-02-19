@@ -35,37 +35,30 @@ class ExpertWeatherSheet extends StatelessWidget {
             style: textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w900),
           ),
-          if (kIsWeb) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Non disponible sur Web pour le moment.',
-              style: textTheme.bodySmall?.copyWith(color: muted),
-            ),
-          ],
           const SizedBox(height: 12),
           _Toggle(
             label: 'Mode expert',
             value: weather.expertWeatherMode,
-            onChanged: kIsWeb ? null : (v) => weather.setExpertWeatherMode(v),
+            onChanged: (v) => weather.setExpertWeatherMode(v),
           ),
           _Toggle(
             label: 'Vent',
             value: weather.expertWindLayer,
-            onChanged: (!kIsWeb && weather.expertWeatherMode)
+            onChanged: weather.expertWeatherMode
                 ? (v) => weather.setExpertWindLayer(v)
                 : null,
           ),
           _Toggle(
             label: 'Pluie',
             value: weather.expertRainLayer,
-            onChanged: (!kIsWeb && weather.expertWeatherMode)
+            onChanged: weather.expertWeatherMode
                 ? (v) => weather.setExpertRainLayer(v)
                 : null,
           ),
           _Toggle(
             label: 'Nuages',
             value: weather.expertCloudLayer,
-            onChanged: (!kIsWeb && weather.expertWeatherMode)
+            onChanged: weather.expertWeatherMode
                 ? (v) => weather.setExpertCloudLayer(v)
                 : null,
           ),
