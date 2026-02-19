@@ -134,7 +134,6 @@ class HorizonApp extends StatelessWidget {
           final themeMode = mode == AppThemeMode.dark
               ? ThemeMode.dark
               : (mode == AppThemeMode.light ? ThemeMode.light : ThemeMode.system);
-
           return MaterialApp(
             title: 'Horizon',
             debugShowCheckedModeBanner: false,

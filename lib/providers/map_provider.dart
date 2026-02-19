@@ -147,7 +147,7 @@ class MapProvider with ChangeNotifier {
     }
   }
 
-  void setController(MaplibreMapController controller) {
+  void setController(MapLibreMapController controller) {
     _mapController = controller;
     _offline?.setController(controller);
     notifyListeners();
