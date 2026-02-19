@@ -74,21 +74,25 @@ class HomeTodayDashboardSheet extends StatelessWidget {
               ),
             )
           else ...[
-            Text('État actuel', style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800, color: scheme.primary)),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 140,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: summary.now.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (ctx, i) {
-                  final n = summary.now[i];
-                  final comfort = n.decision.comfortScore;
-                  return _placeCard(context, n.place.name, comfort, n.decision.now.temperature);
-                },
-              ),
+          _buildBriefing(context, summary),
+          const SizedBox(height: 24),
+          Text('État actuel', style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800, color: scheme.primary)),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.4,
             ),
+            itemCount: summary.now.length,
+            itemBuilder: (ctx, i) {
+              final n = summary.now[i];
+              return _placeCard(context, n.place.name, n.decision.comfortScore, n.decision.now.temperature);
+            },
+          ),
             if (summary.bestWindows.isNotEmpty) ...[
               const SizedBox(height: 24),
               Text('Meilleurs créneaux', style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800, color: scheme.primary)),
@@ -141,6 +145,45 @@ class HomeTodayDashboardSheet extends StatelessWidget {
             ],
           ],
           const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBriefing(BuildContext context, dynamic summary) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    
+    String briefing = "Chargement de ton briefing...";
+    if (summary.bestWindows.isNotEmpty) {
+      final best = summary.bestWindows.first;
+      final t = best.atUtc.toLocal();
+      final hh = t.hour.toString().padLeft(2, '0');
+      final mm = t.minute.toString().padLeft(2, '0');
+      briefing = "Bonjour ! Ton partenaire Horizon te conseille de partir vers **${best.place.name}** aux alentours de **$hh:$mm** pour bénéficier d'un confort optimal (${best.decision.comfortScore.toStringAsFixed(1)}/10).";
+    } else {
+      briefing = "Les conditions actuelles sont stables. Consulte tes lieux favoris ci-dessous pour plus de détails.";
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: scheme.primary.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, size: 20, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text('CONSEIL HORIZON', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w900, color: scheme.primary)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(briefing, style: theme.textTheme.bodyMedium?.copyWith(height: 1.4)),
         ],
       ),
     );

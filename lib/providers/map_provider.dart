@@ -40,6 +40,7 @@ class MapProvider with ChangeNotifier {
   bool _appInForeground = true;
   bool _notificationsEnabledForContextual = false;
   bool _geocodingLoading = false;
+  List<String> _recentSearches = [];
 
   MaplibreMapController? get mapController => _mapController;
   LatLng? get webCenter => _webCenter;
@@ -66,6 +67,7 @@ class MapProvider with ChangeNotifier {
   bool? get isOnline => _isOnline;
   bool get lowPowerMode => _lowPowerMode;
   bool get geocodingLoading => _geocodingLoading;
+  List<String> get recentSearches => _recentSearches;
 
   String confidenceLabel(double confidence) {
     return confidenceLabelFr(confidence);
@@ -248,6 +250,23 @@ class MapProvider with ChangeNotifier {
       CameraUpdate.newLatLngZoom(position, 14.0),
     );
   }
+
+  Future<void> addToRecentSearches(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return;
+    _recentSearches.remove(q);
+    _recentSearches.insert(0, q);
+    if (_recentSearches.length > 5) {
+      _recentSearches = _recentSearches.sublist(0, 5);
+    }
+    notifyListeners();
+    // In a real app, save to Storage here.
+  }
+
+  void clearRecentSearches() {
+    _recentSearches.clear();
+    notifyListeners();
+  }
   
   Future<List<GeocodingResult>> searchLocation(String query) async {
     if (query.trim().isEmpty) return const [];
@@ -259,6 +278,7 @@ class MapProvider with ChangeNotifier {
     try {
       final results = await _geocoding.search(query, count: 10);
       if (results.isNotEmpty) {
+        await addToRecentSearches(query);
         if (results.length == 1) {
           final target = results.first.location;
           centerOnUser(target);

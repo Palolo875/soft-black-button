@@ -63,6 +63,7 @@ class RoutingProvider with ChangeNotifier {
   String? _routeExplanation;
   Map<RouteVariantKind, RouteExplanation> _routeExplanations = const {};
   RouteWeatherSample? _selectedRouteWeatherSample;
+  int? _scrubIndex;
 
   bool _gpxImportLoading = false;
   String? _gpxImportError;
@@ -84,6 +85,7 @@ class RoutingProvider with ChangeNotifier {
   Map<RouteVariantKind, RouteExplanation> get routeExplanations => _routeExplanations;
   RouteExplanation? get currentRouteExplanation => _routeExplanations[_selectedVariant];
   RouteWeatherSample? get selectedRouteWeatherSample => _selectedRouteWeatherSample;
+  int? get scrubIndex => _scrubIndex;
 
   bool get gpxImportLoading => _gpxImportLoading;
   String? get gpxImportError => _gpxImportError;
@@ -255,9 +257,25 @@ class RoutingProvider with ChangeNotifier {
     _selectedVariant = RouteVariantKind.fast;
     _departureCompareCache = null;
     _departureWindowCache = null;
+    _scrubIndex = null;
     notifyListeners();
     _mapRenderer.clearMarkers(_mapController);
     _mapRenderer.clear(_mapController);
+    _mapRenderer.clearScrubMarker(_mapController);
+  }
+
+  void setScrubIndex(int? index) {
+    if (_scrubIndex == index) return;
+    _scrubIndex = index;
+    notifyListeners();
+    
+    final v = _currentVariant();
+    if (v != null && index != null && index < v.shape.length) {
+      final point = v.shape[index];
+      _mapRenderer.updateScrubMarker(_mapController, point);
+    } else {
+      _mapRenderer.clearScrubMarker(_mapController);
+    }
   }
 
   void selectRouteVariant(RouteVariantKind kind) {
@@ -268,6 +286,7 @@ class RoutingProvider with ChangeNotifier {
     notifyListeners();
     _renderSelectedRoute();
     unawaited(_evaluateAndNotifyContextual());
+    _tiltMapForRoute();
   }
 
   RouteVariant? _currentVariant() {
@@ -376,6 +395,7 @@ class RoutingProvider with ChangeNotifier {
     _renderRouteMarkers();
     await _renderSelectedRoute();
     unawaited(_evaluateAndNotifyContextual());
+    _tiltMapForRoute();
   }
 
   Future<void> importGpxRoute() async {
@@ -587,6 +607,17 @@ class RoutingProvider with ChangeNotifier {
       selectedVariant: _currentVariant(),
       weatherSegmentsGeoJson: null, // Markers only update
     );
+  }
+
+  void _tiltMapForRoute() {
+    final v = _currentVariant();
+    if (v == null || _mapController == null || kIsWeb) return;
+    final elev = v.elevationGain ?? 0;
+    if (elev > 150) {
+      _mapController?.animateCamera(CameraUpdate.tiltTo(40.0));
+    } else {
+      _mapController?.animateCamera(CameraUpdate.tiltTo(0.0));
+    }
   }
 
   Future<void> _renderSelectedRoute() async {

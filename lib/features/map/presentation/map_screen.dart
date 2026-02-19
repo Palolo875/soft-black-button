@@ -46,6 +46,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   WeatherProvider? _weather;
   RoutingProvider? _routing;
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _showRecent = false;
+  bool _uiVisible = true;
+  Timer? _hideTimer;
 
   @override
   void initState() {
@@ -75,6 +79,12 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       };
       conn.addListener(_connectivityListener!);
       _connectivityListener!();
+      
+      _searchFocusNode.addListener(() {
+        setState(() {
+          _showRecent = _searchFocusNode.hasFocus && _searchController.text.isEmpty;
+        });
+      });
     });
   }
 
@@ -87,6 +97,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
     WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -120,6 +131,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       final loc = Provider.of<LocationProvider>(context, listen: false);
       final position = await loc.getCurrentPosition();
       final target = LatLng(position.latitude, position.longitude);
+      unawaited(HapticFeedback.mediumImpact());
       mapProvider.centerOnUser(target);
       final weather = Provider.of<WeatherProvider>(context, listen: false);
       unawaited(weather.refreshWeatherAt(target, userInitiated: true));
@@ -133,6 +145,24 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         const SnackBar(content: Text('Impossible de récupérer la position. Vérifie les permissions et le GPS.')),
       );
     }
+  }
+
+  void _onMapMoveStart() {
+    if (!_uiVisible) return;
+    setState(() => _uiVisible = false);
+    _hideTimer?.cancel();
+  }
+
+  void _onMapMoveEnd() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _uiVisible = true);
+    });
+  }
+
+  void _pokeUi() {
+    if (!_uiVisible) setState(() => _uiVisible = true);
+    _onMapMoveEnd();
   }
 
   @override
@@ -163,13 +193,41 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               routing.setController(controller);
               offline.setController(controller);
             },
+            onCameraMoveStarted: _onMapMoveStart,
+            onCameraMoveFinished: _onMapMoveEnd,
+            onMapTap: (ll) => _pokeUi(),
           ),
           if (!mapProvider.isStyleLoaded)
             const Center(child: CircularProgressIndicator()),
 
+          // ----- Top Search Bar -----
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            top: _uiVisible ? 10 : -100,
+            left: edgeInset,
+            right: edgeInset,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              opacity: _uiVisible ? 1.0 : 0.0,
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildSearchBar(context, mapProvider, onSurfaceMuted, onSurfaceSubtle),
+                    if (_showRecent && mapProvider.recentSearches.isNotEmpty)
+                      _buildRecentSearches(context, mapProvider, scheme),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
           // ----- Top status area -----
-          Positioned(
-            top: 60,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+            top: _uiVisible ? 70 : 10,
             left: edgeInset,
             right: edgeInset,
             child: Center(
@@ -181,10 +239,15 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const WeatherStatusPill(),
-                      if (routing.routeVariants.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        const RouteInfoCard(),
-                      ],
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        child: routing.routeVariants.isNotEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: const RouteInfoCard(),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
                     ],
                   ),
                 ),
@@ -192,65 +255,67 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             ),
           ),
 
-          // ----- Bottom controls (split to avoid blocking the map hit-test area) -----
-          Positioned(
-            bottom: 40,
+          // ----- Bottom controls -----
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+            bottom: _uiVisible ? 40 : -200,
             left: edgeInset,
             child: SafeArea(
               top: false,
-              child: FocusTraversalGroup(
-                policy: OrderedTraversalPolicy(),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: w >= HorizonBreakpoints.medium ? 640 : 340,
-                    maxHeight: MediaQuery.sizeOf(context).height * (w >= HorizonBreakpoints.medium ? 0.70 : 0.42),
-                  ),
-                  child: SingleChildScrollView(
-                    reverse: true,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildRoutingControls(
-                          context, routing, offline, mapProvider,
-                          onSurfaceStrong, onSurfaceMuted, onSurfaceSubtle, scheme,
-                        ),
-                        _buildRoutingMessages(context, routing, onSurfaceStrong),
-                      ],
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: _uiVisible ? 1.0 : 0.0,
+                child: FocusTraversalGroup(
+                  policy: OrderedTraversalPolicy(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: w >= HorizonBreakpoints.medium ? 640 : 340,
+                      maxHeight: MediaQuery.sizeOf(context).height * (w >= HorizonBreakpoints.medium ? 0.70 : 0.42),
+                    ),
+                    child: SingleChildScrollView(
+                      reverse: true,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildRoutingControls(
+                            context, routing, offline, mapProvider,
+                            onSurfaceStrong, onSurfaceMuted, onSurfaceSubtle, scheme,
+                          ),
+                          _buildRoutingMessages(context, routing, onSurfaceStrong),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          Positioned(
-            bottom: 40,
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOut,
+            bottom: _uiVisible ? 40 : -200,
             right: edgeInset,
             child: SafeArea(
               top: false,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 420,
-                  maxHeight: MediaQuery.sizeOf(context).height * (w >= HorizonBreakpoints.medium ? 0.70 : 0.62),
-                ),
-                child: SingleChildScrollView(
-                  reverse: true,
-                  child: _buildActionColumn(
-                    context, routing, offline, mapProvider,
-                    onSurfaceStrong, onSurfaceMuted, onSurfaceSubtle, scheme,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: _uiVisible ? 1.0 : 0.0,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 420,
+                    maxHeight: MediaQuery.sizeOf(context).height * (w >= HorizonBreakpoints.medium ? 0.70 : 0.62),
+                  ),
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: _buildActionColumn(
+                      context, routing, offline, mapProvider,
+                      onSurfaceStrong, onSurfaceMuted, onSurfaceSubtle, scheme,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          
-          // ----- Top Search Bar -----
-          Positioned(
-            top: 10,
-            left: edgeInset,
-            right: edgeInset,
-            child: SafeArea(
-              child: _buildSearchBar(context, mapProvider, onSurfaceMuted, onSurfaceSubtle),
             ),
           ),
         ],
@@ -650,11 +715,14 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
         ),
         _fab(
           heroTag: 'recenter',
-          order: 4,
-          icon: Icons.my_location,
-          tooltip: 'Me recentrer',
-          color: onSurfaceStrong,
-          onPressed: () => _recenterOnUser(mapProvider),
+          order: 0,
+          icon: Icons.my_location_rounded,
+          tooltip: 'Ma position',
+          color: scheme.primary,
+          onPressed: () {
+            unawaited(HapticFeedback.lightImpact());
+            _recenterOnUser(mapProvider);
+          },
         ),
         _fab(
           heroTag: 'import-gpx',
@@ -681,8 +749,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       ),
       child: TextField(
         controller: _searchController,
+        focusNode: _searchFocusNode,
         textInputAction: TextInputAction.search,
+        onChanged: (v) {
+          setState(() {
+            _showRecent = _searchFocusNode.hasFocus && v.isEmpty;
+          });
+        },
         onSubmitted: (query) async {
+          unawaited(HapticFeedback.mediumImpact());
+          _searchFocusNode.unfocus();
           final results = await mapProvider.searchLocation(query);
           if (!context.mounted) return;
           if (results.length > 1) {
@@ -691,7 +767,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               results: results,
               onSelected: (r) => mapProvider.centerOnUser(r.location),
             ));
-          } else if (results.isEmpty) {
+          } else if (results.isEmpty && query.isNotEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Aucun résultat pour "$query"')),
             );

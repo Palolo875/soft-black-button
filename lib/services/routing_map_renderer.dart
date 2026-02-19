@@ -10,6 +10,20 @@ class RoutingMapRenderer {
   Future<void> initLayers(MaplibreMapController controller) async {
     try {
       await controller.addSource('route-source', GeojsonSourceProperties(data: _emptyFeatureCollection()));
+      
+      // Case (stroke) for the route to pop on top of terrain
+      await controller.addLineLayer(
+        'route-source',
+        'route-line-casing',
+        const LineLayerProperties(
+          lineColor: '#000000',
+          lineWidth: 8.0,
+          lineOpacity: 0.25,
+          lineJoin: 'round',
+          lineCap: 'round',
+        ),
+      );
+
       await controller.addLineLayer(
         'route-source',
         'route-line',
@@ -101,6 +115,20 @@ class RoutingMapRenderer {
           circleBlur: 0.15,
           circleStrokeColor: '#ffffff',
           circleStrokeWidth: 1.2,
+        ),
+      );
+    } catch (_) {}
+
+    try {
+      await controller.addSource('scrub-source', GeojsonSourceProperties(data: _emptyFeatureCollection()));
+      await controller.addCircleLayer(
+        'scrub-source',
+        'scrub-marker-layer',
+        const CircleLayerProperties(
+          circleRadius: 10.0,
+          circleColor: '#ffffff',
+          circleStrokeColor: '#4A90A0',
+          circleStrokeWidth: 3.0,
         ),
       );
     } catch (_) {}
@@ -209,6 +237,26 @@ class RoutingMapRenderer {
     if (controller == null) return;
     try {
       await controller.setGeoJsonSource('route-markers', _emptyFeatureCollection());
+    } catch (_) {}
+  }
+
+  Future<void> updateScrubMarker(MaplibreMapController? controller, LatLng point) async {
+    if (controller == null) return;
+    try {
+      await controller.setGeoJsonSource('scrub-source', {
+        'type': 'Feature',
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [point.longitude, point.latitude],
+        },
+      });
+    } catch (_) {}
+  }
+
+  Future<void> clearScrubMarker(MaplibreMapController? controller) async {
+    if (controller == null) return;
+    try {
+      await controller.setGeoJsonSource('scrub-source', _emptyFeatureCollection());
     } catch (_) {}
   }
 

@@ -166,34 +166,43 @@ class RouteInfoCard extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              Text(
-                'Min confort $minComfort/10  •  Dénivelé +${ex.metrics.elevationGain.round()}m / -${ex.metrics.elevationLoss.round()}m',
-                style:
-                    textTheme.bodySmall?.copyWith(color: body),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Pluie ~$rainKm km  •  Vent $windKmh km/h',
-                style:
-                    textTheme.bodySmall?.copyWith(color: body),
-              ),
+              _buildMetricGrid(context, ex),
               const SizedBox(height: 6),
               Text(
                 'Fiabilité : $confLabel (confiance $conf%)',
                 style:
                     textTheme.bodySmall?.copyWith(color: muted),
               ),
-              if (variant.elevationProfile != null && variant.elevationProfile!.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                ElevationSparkline(profile: variant.elevationProfile!, height: 60),
-                const SizedBox(height: 4),
-                Center(
-                  child: Text(
-                    'Profil d\'élévation (relatif)',
-                    style: textTheme.labelSmall?.copyWith(color: muted, fontSize: 9),
-                  ),
+              const SizedBox(height: 16),
+              Consumer<RoutingProvider>(
+                builder: (context, routing, _) {
+                  return Column(
+                    children: [
+                      ElevationSparkline(
+                        profile: variant.elevationProfile ?? [],
+                        height: 80,
+                        selectedIndex: routing.scrubIndex,
+                        onSelected: (idx) => routing.setScrubIndex(idx),
+                      ),
+                      if (routing.scrubIndex != null && variant.elevationProfile != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Altitude : ${variant.elevationProfile![routing.scrubIndex!].round()}m',
+                            style: textTheme.labelSmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 4),
+              Center(
+                child: Text(
+                  'Fais glisser pour explorer le relief',
+                  style: textTheme.labelSmall?.copyWith(color: muted, fontSize: 9),
                 ),
-              ],
+              ),
               if (ex.factors.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 Text(
@@ -230,6 +239,81 @@ class RouteInfoCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMetricGrid(BuildContext context, dynamic ex) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _MetricTile(
+          icon: Icons.terrain_rounded,
+          label: 'Dénivelé',
+          value: '+${ex.metrics.elevationGain.round()}m',
+        ),
+        _MetricTile(
+          icon: Icons.air_rounded,
+          label: 'Vent moy.',
+          value: '${msToKmh(ex.metrics.avgWind).toStringAsFixed(0)} km/h',
+        ),
+        _MetricTile(
+          icon: Icons.umbrella_rounded,
+          label: 'Pluie',
+          value: '~${ex.metrics.rainKm.toStringAsFixed(1)} km',
+        ),
+        _MetricTile(
+          icon: Icons.speed_rounded,
+          label: 'Confort min',
+          value: '${ex.metrics.minComfort.toStringAsFixed(1)}/10',
+          color: ex.metrics.minComfort < 5 ? Colors.orange : null,
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? color;
+
+  const _MetricTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    
+    return Container(
+      width: (MediaQuery.sizeOf(context).width - 60) / 2,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color ?? scheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurface.withOpacity(0.6))),
+                Text(value, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900, color: color)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
