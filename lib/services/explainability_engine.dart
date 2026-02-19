@@ -28,6 +28,8 @@ class RouteVariantMetrics {
   final double rainKm;
   final double extremeTempKm;
   final double minComfort;
+  final double elevationGain;
+  final double elevationLoss;
 
   const RouteVariantMetrics({
     required this.avgConfidence,

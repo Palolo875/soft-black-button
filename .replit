@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["jq", "unzip"]
+packages = ["jq", "unzip", "flutter"]
 
 [workflows]
 runButton = "Project"
@@ -27,7 +27,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "export PATH=\"/home/runner/flutter/bin:$PATH\" && cd /home/runner/workspace && dart run serve.dart"
+args = "cd /home/runner/workspace && dart run serve.dart"
 waitForPort = 5000
 
 [[ports]]
@@ -35,5 +35,7 @@ localPort = 5000
 externalPort = 80
 
 [deployment]
-deploymentTarget = "static"
+deploymentTarget = "autoscale"
 publicDir = "build/web"
+run = ["bash", "-c", "cd /home/runner/workspace && dart run serve.dart"]
+build = ["bash", "-c", "cd /home/runner/workspace && flutter build web --release --base-href /"]

@@ -7,6 +7,7 @@ import 'package:horizon/core/mobility/travel_mode.dart';
 import 'package:horizon/services/comfort_profile.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/weather_models.dart';
 
 class RoutingEngine {
   final ValhallaClient _valhalla;

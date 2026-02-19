@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 
@@ -185,10 +186,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       extendBodyBehindAppBar: true,
       body: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.slash): () {
+          SingleActivator(LogicalKeyboardKey.slash): () {
             _searchFocusNode.requestFocus();
           },
-          const SingleActivator(LogicalKeyboardKey.escape): () {
+          SingleActivator(LogicalKeyboardKey.escape): () {
             _searchFocusNode.unfocus();
             if (mounted) setState(() => _showRecent = false);
           },
@@ -330,11 +331,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: const OfflineProgressBar(),
     );
   }
-}
 
   // ---------------------------------------------------------------------------
   // Extracted build helpers (still in same file for access to state/context)
@@ -799,6 +800,37 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRecentSearches(
+    BuildContext context,
+    MapProvider mapProvider,
+    ColorScheme scheme,
+  ) {
+    final recents = mapProvider.recentSearches;
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        color: scheme.surface.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: recents.map((r) {
+          return ListTile(
+            dense: true,
+            leading: Icon(Icons.history, color: scheme.onSurface.withOpacity(0.5)),
+            title: Text(r, style: Theme.of(context).textTheme.bodyMedium),
+            onTap: () {
+              _searchController.text = r;
+              _searchFocusNode.unfocus();
+              setState(() => _showRecent = false);
+              mapProvider.searchLocation(r);
+            },
+          );
+        }).toList(),
       ),
     );
   }

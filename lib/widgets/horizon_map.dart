@@ -95,8 +95,8 @@ class _HorizonMapState extends State<HorizonMap> {
           tiltGesturesEnabled: true,
           compassEnabled: true,
           trackCameraPosition: true,
-          onCameraMoveStarted: widget.onCameraMoveStarted,
-          onCameraMoveFinished: widget.onCameraMoveFinished,
+          onCameraMove: widget.onCameraMoveStarted != null ? (_) => widget.onCameraMoveStarted!() : null,
+          onCameraIdle: widget.onCameraMoveFinished,
           onStyleLoadedCallback: () {
             AppLog.d('map.style.loaded');
             Provider.of<MapProvider>(context, listen: false).setStyleLoaded(true);

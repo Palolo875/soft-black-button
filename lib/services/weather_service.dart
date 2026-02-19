@@ -139,6 +139,11 @@ class WeatherService {
     );
   }
 
+  void move(double lat, double lng) {
+    _currentCenterLat = lat;
+    _currentCenterLng = lng;
+  }
+
   void dispose() {
     _animationTimer?.cancel();
   }
