@@ -19,6 +19,7 @@ import 'package:horizon/ui/horizon_bottom_sheet.dart';
 import 'package:horizon/features/map/presentation/utils/format_utils.dart';
 import 'package:horizon/core/mobility/travel_mode.dart';
 import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/theme_settings_store.dart';
 
 /// Bottom sheet for privacy/settings/data management.
 class SettingsSheet extends StatelessWidget {

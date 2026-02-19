@@ -139,9 +139,9 @@ class WeatherMapRenderer {
     } catch (_) {}
 
     try {
-      await controller.setPaintProperty('expert-wind-layer', 'circle-opacity', expertWindLayer ? 0.55 : 0.0);
-      await controller.setPaintProperty('expert-rain-layer', 'circle-opacity', expertRainLayer ? 0.42 : 0.0);
-      await controller.setPaintProperty('expert-cloud-layer', 'circle-opacity', expertCloudLayer ? 0.28 : 0.0);
+      await controller.setLayerProperties('expert-wind-layer', CircleLayerProperties(circleOpacity: expertWindLayer ? 0.55 : 0.0));
+      await controller.setLayerProperties('expert-rain-layer', CircleLayerProperties(circleOpacity: expertRainLayer ? 0.42 : 0.0));
+      await controller.setLayerProperties('expert-cloud-layer', CircleLayerProperties(circleOpacity: expertCloudLayer ? 0.28 : 0.0));
     } catch (_) {}
   }
 

@@ -11,6 +11,7 @@ import 'package:horizon/providers/map_provider.dart';
 import 'package:horizon/providers/location_provider.dart';
 import 'package:horizon/providers/weather_provider.dart';
 import 'package:horizon/providers/routing_provider.dart';
+import 'package:horizon/services/routing_models.dart';
 import 'package:horizon/core/log/app_log.dart';
 
 class HorizonMap extends StatefulWidget {
@@ -141,7 +142,7 @@ class _HorizonMapState extends State<HorizonMap> {
           },
         ),
         children: [
-          const TileLayer(
+          TileLayer(
             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
             userAgentPackageName: 'app.horizon',
           ),

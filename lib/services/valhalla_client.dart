@@ -66,7 +66,7 @@ class ValhallaClient {
     );
     final parsed = Uri.tryParse(raw);
     if (parsed == null) {
-      return const Uri(scheme: 'https', host: 'valhalla1.openstreetmap.de');
+      return Uri(scheme: 'https', host: 'valhalla1.openstreetmap.de');
     }
     if (!parsed.hasScheme) {
       return Uri.parse('https://$raw');

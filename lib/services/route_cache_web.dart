@@ -38,8 +38,8 @@ class RouteCache {
     this.ttl = const Duration(days: 2),
     this.encrypted = false,
     this.maxEntries = 64,
-    SecureFileStore secureStore = const SecureFileStore(),
-  }) : _store = secureStore;
+    SecureFileStore? secureStore,
+  }) : _store = secureStore ?? SecureFileStore();
 
   Future<Map<String, dynamic>> _loadIndex() async {
     final raw = await _store.readJsonDecrypted(_secureIndexKey);
@@ -71,10 +71,6 @@ class RouteCache {
     }
     index['items'] = items;
     await _saveIndex(index);
-
-    if (deleted > 0) {
-      AppLog.d('routeCache.prune', props: {'deleted': deleted, 'remaining': items.length, 'encrypted': encrypted});
-    }
   }
 
   Future<void> _removeFromIndex(String key) async {

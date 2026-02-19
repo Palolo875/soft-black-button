@@ -16,8 +16,10 @@ import 'package:horizon/providers/routing_provider.dart';
 import 'package:horizon/providers/offline_provider.dart';
 import 'package:horizon/services/route_compare_service.dart';
 import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/explainability_engine.dart';
 import 'package:horizon/ui/horizon_bottom_sheet.dart';
 import 'package:horizon/ui/horizon_breakpoints.dart';
+import 'package:horizon/ui/horizon_theme.dart';
 import 'package:horizon/ui/horizon_card.dart';
 import 'package:horizon/widgets/horizon_map.dart';
 
@@ -671,7 +673,6 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             padding: const EdgeInsets.all(4),
             decoration: glassDecoration(context, opacity: 0.85),
             child: TextField(
-              semanticsLabel: 'Recherche de destination',
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: 'Où allez-vous ?',
@@ -696,23 +697,29 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     VoidCallback? onPressed,
     VoidCallback? onLongPress,
   }) {
+    Widget fab = FloatingActionButton.small(
+      heroTag: heroTag,
+      onPressed: onPressed,
+      child: Tooltip(
+        message: tooltip,
+        child: Semantics(
+          button: true,
+          label: tooltip,
+          child: Icon(icon, color: color),
+        ),
+      ),
+    );
+    if (onLongPress != null) {
+      fab = GestureDetector(
+        onLongPress: onLongPress,
+        child: fab,
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: FocusTraversalOrder(
         order: NumericFocusOrder(order),
-        child: FloatingActionButton.small(
-          heroTag: heroTag,
-          onPressed: onPressed,
-          onLongPress: onLongPress,
-          child: Tooltip(
-            message: tooltip,
-            child: Semantics(
-              button: true,
-              label: tooltip,
-              child: Icon(icon, color: color),
-            ),
-          ),
-        ),
+        child: fab,
       ),
     );
   }

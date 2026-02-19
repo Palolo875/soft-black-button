@@ -9,6 +9,8 @@ import 'package:horizon/providers/routing_provider.dart';
 import 'package:horizon/providers/offline_provider.dart';
 import 'package:horizon/core/log/app_log.dart';
 import 'package:horizon/core/format/confidence_label.dart';
+import 'package:horizon/services/explainability_engine.dart';
+import 'package:horizon/services/weather_models.dart';
 
 class MapProvider with ChangeNotifier {
   MaplibreMapController? _mapController;

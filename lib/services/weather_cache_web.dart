@@ -38,8 +38,8 @@ class WeatherCache {
     this.ttl = const Duration(minutes: 30),
     this.encrypted = false,
     this.maxEntries = 256,
-    SecureFileStore secureStore = const SecureFileStore(),
-  }) : _store = secureStore;
+    SecureFileStore? secureStore,
+  }) : _store = secureStore ?? SecureFileStore();
 
   Future<Map<String, dynamic>> _loadIndex() async {
     final raw = await _store.readJsonDecrypted(_secureIndexKey);
@@ -71,10 +71,6 @@ class WeatherCache {
     }
     index['items'] = items;
     await _saveIndex(index);
-
-    if (deleted > 0) {
-      AppLog.d('weatherCache.prune', props: {'deleted': deleted, 'remaining': items.length, 'encrypted': encrypted});
-    }
   }
 
   Future<void> _removeFromIndex(String key) async {

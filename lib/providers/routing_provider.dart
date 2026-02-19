@@ -16,6 +16,9 @@ import 'package:horizon/services/route_cache.dart';
 import 'package:horizon/services/route_compare_service.dart';
 import 'package:horizon/services/route_weather_projector.dart';
 import 'package:horizon/services/routing_engine.dart';
+import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/weather_models.dart';
+import 'package:horizon/services/route_geometry.dart';
 import 'package:horizon/services/notification_service.dart';
 import 'package:horizon/services/routing_map_renderer.dart';
 import 'package:horizon/core/format/confidence_label.dart';
@@ -703,7 +706,6 @@ class RoutingProvider with ChangeNotifier {
       lengthKm: variant.lengthKm,
       timeSeconds: variant.timeSeconds,
       weatherSamples: variant.weatherSamples,
-      meta: variant.meta,
     );
 
     final explanation = _explainability.explain(v: v, allMetrics: {v.kind: _explainability.metricsFor(v)});

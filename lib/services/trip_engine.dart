@@ -1,7 +1,9 @@
 import 'package:horizon/services/comfort_profile.dart';
 import 'package:horizon/services/routing_engine.dart';
 import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/weather_models.dart';
 import 'package:horizon/services/trip_models.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
 class TripEngine {
   final RoutingEngine _routing;
