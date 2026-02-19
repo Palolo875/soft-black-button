@@ -33,11 +33,15 @@ serve.dart               - Simple Dart HTTP server for serving built app on port
 
 ## Key Dependencies
 - maplibre_gl: ^0.25.0
+- flutter_map: ^8.2.2
 - provider: ^6.1.5+1
 - http: ^1.6.0
 - path_provider: ^2.1.5
 - geolocator: ^14.0.2
 - pmtiles: ^1.3.0
+- connectivity_plus: ^7.0.0
+- flutter_secure_storage: ^10.0.0
+- flutter_local_notifications: ^20.1.0
 
 ## Build & Run
 - Build: `flutter build web --release --base-href "/"`
@@ -54,6 +58,11 @@ serve.dart               - Simple Dart HTTP server for serving built app on port
 - `METNO_USER_AGENT` - User-Agent for Met.no API (required by their ToS)
 
 ## Recent Changes
+- 2026-02-19: Full Upgrade of Dependencies & SDK
+  - Upgraded Flutter dependencies to latest major versions (flutter_map 8.2.2, connectivity_plus 7.0.0, etc.)
+  - Updated Dart SDK constraint to ^3.8.0 in pubspec.yaml
+  - Refactored `NotificationService` to support breaking changes in `flutter_local_notifications` 20.1.0
+  - Verified build and serving on port 5000
 - 2026-02-19: Set up in Replit environment
   - Installed Dart 3.10 module and Flutter 3.32.0 via nix
   - Fixed CardTheme -> CardThemeData API compatibility
