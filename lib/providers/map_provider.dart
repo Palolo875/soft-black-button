@@ -10,6 +10,7 @@ import 'package:horizon/providers/offline_provider.dart';
 import 'package:horizon/core/log/app_log.dart';
 import 'package:horizon/core/format/confidence_label.dart';
 import 'package:horizon/services/explainability_engine.dart';
+import 'package:horizon/services/geocoding_service.dart';
 import 'package:horizon/services/weather_models.dart';
 
 class MapProvider with ChangeNotifier {
@@ -21,20 +22,24 @@ class MapProvider with ChangeNotifier {
   final PrivacyService _privacyService;
   final AnalyticsService _analytics;
   final PerfMetrics _metrics;
+  final GeocodingService _geocoding;
 
   MapProvider({
     PrivacyService? privacyService,
     AnalyticsService? analytics,
     PerfMetrics? metrics,
+    GeocodingService? geocoding,
   })  : _privacyService = privacyService ?? const PrivacyService(),
         _analytics = analytics ?? AnalyticsService(),
-        _metrics = metrics ?? PerfMetrics();
+        _metrics = metrics ?? PerfMetrics(),
+        _geocoding = geocoding ?? GeocodingService();
 
   double _timeOffset = 0.0;
   bool? _isOnline;
   bool _lowPowerMode = false;
   bool _appInForeground = true;
   bool _notificationsEnabledForContextual = false;
+  bool _geocodingLoading = false;
 
   MaplibreMapController? get mapController => _mapController;
   LatLng? get webCenter => _webCenter;
@@ -60,6 +65,7 @@ class MapProvider with ChangeNotifier {
   String get pmtilesFileName => _offline?.pmtilesFileName ?? 'horizon.pmtiles';
   bool? get isOnline => _isOnline;
   bool get lowPowerMode => _lowPowerMode;
+  bool get geocodingLoading => _geocodingLoading;
 
   String confidenceLabel(double confidence) {
     return confidenceLabelFr(confidence);
@@ -241,6 +247,34 @@ class MapProvider with ChangeNotifier {
     _mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(position, 14.0),
     );
+  }
+  
+  Future<List<GeocodingResult>> searchLocation(String query) async {
+    if (query.trim().isEmpty) return const [];
+    
+    _geocodingLoading = true;
+    notifyListeners();
+    _analytics.record('search_initiated', props: {'query': query});
+    
+    try {
+      final results = await _geocoding.search(query, count: 10);
+      if (results.isNotEmpty) {
+        if (results.length == 1) {
+          final target = results.first.location;
+          centerOnUser(target);
+        }
+        AppLog.i('Search for "$query" found ${results.length} results.');
+      } else {
+        AppLog.i('Search for "$query" - No results found.');
+      }
+      return results;
+    } catch (e, st) {
+      AppLog.e('Search failed', error: e, stackTrace: st);
+      return const [];
+    } finally {
+      _geocodingLoading = false;
+      notifyListeners();
+    }
   }
 
 }

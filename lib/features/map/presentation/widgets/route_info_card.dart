@@ -8,6 +8,7 @@ import 'package:horizon/ui/horizon_card.dart';
 import 'package:horizon/ui/horizon_bottom_sheet.dart';
 import 'package:horizon/features/map/presentation/utils/format_utils.dart';
 import 'package:horizon/features/map/presentation/widgets/route_chip.dart';
+import 'package:horizon/features/map/presentation/widgets/elevation_sparkline.dart';
 
 /// Card showing routing summary, variant selector, and weather metrics.
 class RouteInfoCard extends StatelessWidget {
@@ -37,10 +38,10 @@ class RouteInfoCard extends StatelessWidget {
     if (ex != null && ex.metrics.avgConfidence > 0) {
       final wind = msToKmh(ex.metrics.avgWind).toStringAsFixed(0);
       final rain = ex.metrics.rainKm.toStringAsFixed(1);
-      final conf = (ex.metrics.avgConfidence * 100).round();
       final minComfort = ex.metrics.minComfort.toStringAsFixed(1);
+      final elev = ex.metrics.elevationGain.round();
       line2 =
-          'min confort $minComfort/10  •  conf $conf%  •  pluie ~$rain km  •  vent $wind km/h';
+          'min confort $minComfort/10  •  elev $elev m  •  pluie ~$rain km  •  vent $wind km/h';
     }
 
     return HorizonCard(
@@ -166,7 +167,13 @@ class RouteInfoCard extends StatelessWidget {
               ],
               const SizedBox(height: 12),
               Text(
-                'Min confort $minComfort/10  •  Pluie ~$rainKm km  •  Vent $windKmh km/h',
+                'Min confort $minComfort/10  •  Dénivelé +${ex.metrics.elevationGain.round()}m / -${ex.metrics.elevationLoss.round()}m',
+                style:
+                    textTheme.bodySmall?.copyWith(color: body),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Pluie ~$rainKm km  •  Vent $windKmh km/h',
                 style:
                     textTheme.bodySmall?.copyWith(color: body),
               ),
@@ -176,6 +183,17 @@ class RouteInfoCard extends StatelessWidget {
                 style:
                     textTheme.bodySmall?.copyWith(color: muted),
               ),
+              if (variant.elevationProfile != null && variant.elevationProfile!.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                ElevationSparkline(profile: variant.elevationProfile!, height: 60),
+                const SizedBox(height: 4),
+                Center(
+                  child: Text(
+                    'Profil d\'élévation (relatif)',
+                    style: textTheme.labelSmall?.copyWith(color: muted, fontSize: 9),
+                  ),
+                ),
+              ],
               if (ex.factors.isNotEmpty) ...[
                 const SizedBox(height: 14),
                 Text(

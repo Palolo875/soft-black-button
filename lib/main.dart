@@ -115,6 +115,7 @@ class HorizonApp extends StatelessWidget {
             privacyService: deps.privacyService,
             analytics: deps.analytics,
             metrics: deps.metrics,
+            geocoding: deps.geocoding,
           ),
           update: (_, routing, map) {
             map?.attachRouting(routing);

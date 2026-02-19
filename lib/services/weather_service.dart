@@ -21,20 +21,35 @@ class WeatherService {
   final Random _random = Random();
   final List<WindParticle> _particles = [];
   double _timeOffset = 0.0;
+  double _currentCenterLat = 0.0;
+  double _currentCenterLng = 0.0;
 
   final double baseLat = 48.8566;
   final double baseLng = 2.3522;
 
-  Future<void> initWeather({required MaplibreMapController controller}) async {
+  Future<void> initWeather({
+    required MaplibreMapController controller,
+    double? initialLat,
+    double? initialLng,
+    double windSpeed = 5.0, // km/h
+    double windAngleRad = 0.0,
+  }) async {
+    final lat = initialLat ?? baseLat;
+    final lng = initialLng ?? baseLng;
+    _currentCenterLat = lat;
+    _currentCenterLng = lng;
+    
     _animationTimer?.cancel();
     _particles.clear();
     // Créer les particules initiales
+    // Créer les particules initiales basées sur le vent réel
     for (int i = 0; i < 150; i++) {
+      final speedFactor = 0.0001 * (windSpeed / 10.0).clamp(0.5, 3.0);
       _particles.add(WindParticle(
-        lat: baseLat + (_random.nextDouble() - 0.5) * 0.1,
-        lng: baseLng + (_random.nextDouble() - 0.5) * 0.1,
-        speed: 0.0005 + _random.nextDouble() * 0.0008,
-        angle: _random.nextDouble() * 2 * pi,
+        lat: lat + (_random.nextDouble() - 0.5) * 0.1,
+        lng: lng + (_random.nextDouble() - 0.5) * 0.1,
+        speed: speedFactor + _random.nextDouble() * 0.0002,
+        angle: windAngleRad + (_random.nextDouble() - 0.5) * 0.2, // Variation légère
       ));
     }
 
@@ -63,8 +78,8 @@ class WeatherService {
       for (var p in _particles) {
         p.move();
         // Wrap around
-        if ((p.lat - baseLat).abs() > 0.05) p.lat = baseLat - (p.lat - baseLat);
-        if ((p.lng - baseLng).abs() > 0.05) p.lng = baseLng - (p.lng - baseLng);
+        if ((p.lat - _currentCenterLat).abs() > 0.1) p.lat = _currentCenterLat - (p.lat - _currentCenterLat);
+        if ((p.lng - _currentCenterLng).abs() > 0.1) p.lng = _currentCenterLng - (p.lng - _currentCenterLng);
       }
       controller.setGeoJsonSource("wind-source", _getGeoJson());
     });
@@ -83,13 +98,14 @@ class WeatherService {
     };
   }
 
-  void updateTimeOffset(double offset) {
-    // Simuler un changement de direction du vent avec le temps
-    double delta = offset - _timeOffset;
+  void updateWithRealWind(double speedKmh, double angleRad) {
     for (var p in _particles) {
-      p.angle += delta * 0.5;
-      p.speed *= (1.0 + delta * 0.1);
+      p.angle = angleRad + (_random.nextDouble() - 0.5) * 0.2;
+      p.speed = 0.0001 * (speedKmh / 10.0).clamp(0.5, 3.0) + _random.nextDouble() * 0.0002;
     }
+  }
+
+  void updateTimeOffset(double offset) {
     _timeOffset = offset;
   }
 

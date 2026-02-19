@@ -25,7 +25,7 @@ class CircuitBreaker {
   Timer? _resetTimer;
 
   CircuitState get state => _state;
-  String get name => name;
+  String get breakerName => name;
 
   CircuitBreaker({
     required this.name,

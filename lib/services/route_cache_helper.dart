@@ -56,6 +56,9 @@ class RouteCacheSerializer {
                 'lengthKm': v.lengthKm,
                 'timeSeconds': v.timeSeconds,
                 'shape': v.shape.map((p) => [p.longitude, p.latitude]).toList(),
+                'elevationGain': v.elevationGain,
+                'elevationLoss': v.elevationLoss,
+                'elevationProfile': v.elevationProfile,
               })
           .toList(),
     };
@@ -102,6 +105,9 @@ class RouteCacheSerializer {
         lengthKm: lengthRaw.toDouble(),
         timeSeconds: timeRaw.toDouble(),
         weatherSamples: const [],
+        elevationGain: raw['elevationGain']?.toDouble(),
+        elevationLoss: raw['elevationLoss']?.toDouble(),
+        elevationProfile: (raw['elevationProfile'] as List?)?.map((e) => (e as num).toDouble()).toList(),
       ));
     }
 

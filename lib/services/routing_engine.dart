@@ -1,19 +1,25 @@
+import 'dart:math';
 import 'package:horizon/services/route_weather_projector.dart';
+import 'package:horizon/services/elevation_service.dart';
 import 'package:horizon/services/routing_models.dart';
 import 'package:horizon/services/valhalla_client.dart';
 import 'package:horizon/core/mobility/travel_mode.dart';
 import 'package:horizon/services/comfort_profile.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:horizon/core/log/app_log.dart';
 
 class RoutingEngine {
   final ValhallaClient _valhalla;
   final RouteWeatherProjector _projector;
+  final ElevationService _elevation;
 
   RoutingEngine({
     ValhallaClient? valhalla,
     RouteWeatherProjector? projector,
+    ElevationService? elevation,
   })  : _valhalla = valhalla ?? ValhallaClient(),
-        _projector = projector ?? RouteWeatherProjector();
+        _projector = projector ?? RouteWeatherProjector(),
+        _elevation = elevation ?? ElevationService();
 
   Future<List<RouteVariant>> computeVariants({
     required LatLng start,
@@ -68,29 +74,14 @@ class RoutingEngine {
           maxSamples: maxSamples,
         );
 
-        return [
-          RouteVariant(
-            kind: RouteVariantKind.fast,
-            shape: fast.shape,
-            lengthKm: fast.lengthKm,
-            timeSeconds: fast.timeSeconds,
-            weatherSamples: fastSamples,
-          ),
-          RouteVariant(
-            kind: RouteVariantKind.safe,
-            shape: safe.shape,
-            lengthKm: safe.lengthKm,
-            timeSeconds: safe.timeSeconds,
-            weatherSamples: safeSamples,
-          ),
-          RouteVariant(
-            kind: RouteVariantKind.scenic,
-            shape: scenic.shape,
-            lengthKm: scenic.lengthKm,
-            timeSeconds: scenic.timeSeconds,
-            weatherSamples: scenicSamples,
-          ),
-        ];
+        return _buildVariants(
+          fast: fast,
+          safe: safe,
+          scenic: scenic,
+          fastSamples: fastSamples,
+          safeSamples: safeSamples,
+          scenicSamples: scenicSamples,
+        );
       }
 
       if (mode == TravelMode.walking) {
@@ -146,29 +137,14 @@ class RoutingEngine {
           maxSamples: maxSamples,
         );
 
-        return [
-          RouteVariant(
-            kind: RouteVariantKind.fast,
-            shape: fast.shape,
-            lengthKm: fast.lengthKm,
-            timeSeconds: fast.timeSeconds,
-            weatherSamples: fastSamples,
-          ),
-          RouteVariant(
-            kind: RouteVariantKind.safe,
-            shape: safe.shape,
-            lengthKm: safe.lengthKm,
-            timeSeconds: safe.timeSeconds,
-            weatherSamples: safeSamples,
-          ),
-          RouteVariant(
-            kind: RouteVariantKind.scenic,
-            shape: scenic.shape,
-            lengthKm: scenic.lengthKm,
-            timeSeconds: scenic.timeSeconds,
-            weatherSamples: scenicSamples,
-          ),
-        ];
+        return _buildVariants(
+          fast: fast,
+          safe: safe,
+          scenic: scenic,
+          fastSamples: fastSamples,
+          safeSamples: safeSamples,
+          scenicSamples: scenicSamples,
+        );
       }
 
       final base = await _valhalla.route(
@@ -185,7 +161,7 @@ class RoutingEngine {
         maxSamples: maxSamples,
       );
 
-      return [
+      return enrichWithElevation([
         RouteVariant(
           kind: RouteVariantKind.fast,
           shape: base.shape,
@@ -193,7 +169,7 @@ class RoutingEngine {
           timeSeconds: base.timeSeconds,
           weatherSamples: samples,
         ),
-      ];
+      ]);
     }
 
     final fast = await _valhalla.route(
@@ -266,7 +242,7 @@ class RoutingEngine {
       maxSamples: maxSamples,
     );
 
-    return [
+    final variants = [
       RouteVariant(
         kind: RouteVariantKind.fast,
         shape: fast.shape,
@@ -289,6 +265,89 @@ class RoutingEngine {
         weatherSamples: scenicSamples,
       ),
     ];
+
+    return enrichWithElevation(variants);
+  }
+
+  Future<List<RouteVariant>> _buildVariants({
+    required ValhallaRouteResult fast,
+    required ValhallaRouteResult safe,
+    required ValhallaRouteResult scenic,
+    required List<RouteWeatherSample> fastSamples,
+    required List<RouteWeatherSample> safeSamples,
+    required List<RouteWeatherSample> scenicSamples,
+  }) async {
+    final variants = [
+      RouteVariant(
+        kind: RouteVariantKind.fast,
+        shape: fast.shape,
+        lengthKm: fast.lengthKm,
+        timeSeconds: fast.timeSeconds,
+        weatherSamples: fastSamples,
+      ),
+      RouteVariant(
+        kind: RouteVariantKind.safe,
+        shape: safe.shape,
+        lengthKm: safe.lengthKm,
+        timeSeconds: safe.timeSeconds,
+        weatherSamples: safeSamples,
+      ),
+      RouteVariant(
+        kind: RouteVariantKind.scenic,
+        shape: scenic.shape,
+        lengthKm: scenic.lengthKm,
+        timeSeconds: scenic.timeSeconds,
+        weatherSamples: scenicSamples,
+      ),
+    ];
+
+    return enrichWithElevation(variants);
+  }
+
+  Future<List<RouteVariant>> enrichWithElevation(List<RouteVariant> variants) async {
+    final enriched = <RouteVariant>[];
+    for (final v in variants) {
+      try {
+        final List<LatLng> sampledPoints = [];
+        // Sample every ~200m for better precision, capped at 400 points
+        final double distMeters = v.lengthKm * 1000;
+        final int idealSamples = (distMeters / 200).round();
+        final int maxSamples = 400;
+        final int numSamples = idealSamples.clamp(20, maxSamples);
+        final step = max(1, v.shape.length ~/ numSamples);
+        
+        for (int i = 0; i < v.shape.length; i += step) {
+          sampledPoints.add(v.shape[i]);
+        }
+        if (sampledPoints.isEmpty || sampledPoints.last != v.shape.last) {
+          sampledPoints.add(v.shape.last);
+        }
+
+        final elevations = await _elevation.getElevation(sampledPoints);
+        double gain = 0;
+        double loss = 0;
+        for (int i = 1; i < elevations.length; i++) {
+          final diff = elevations[i] - elevations[i - 1];
+          if (diff > 0) gain += diff;
+          else loss += diff.abs();
+        }
+
+        enriched.add(RouteVariant(
+          kind: v.kind,
+          shape: v.shape,
+          lengthKm: v.lengthKm,
+          timeSeconds: v.timeSeconds,
+          weatherSamples: v.weatherSamples,
+          elevationGain: gain,
+          elevationLoss: loss,
+          elevationProfile: elevations,
+        ));
+      } catch (e, st) {
+        AppLog.w('Could not enrich variant with elevation', error: e, stackTrace: st);
+        enriched.add(v);
+      }
+    }
+    return enriched;
   }
 
   Future<(ValhallaRouteResult, ValhallaRouteResult, ValhallaRouteResult)> _computeMotorizedVariants({
@@ -422,8 +481,6 @@ class RoutingEngine {
       case TravelMode.car:
         return 'auto';
       case TravelMode.motorbike:
-        // Not all Valhalla deployments enable motorcycle; we will fall back to
-        // auto at runtime if this costing isn't supported.
         return 'motorcycle';
     }
   }

@@ -1,5 +1,7 @@
 import 'package:horizon/services/analytics_service.dart';
 import 'package:horizon/services/explainability_engine.dart';
+import 'package:horizon/services/geocoding_service.dart';
+import 'package:horizon/services/elevation_service.dart';
 import 'package:horizon/services/gpx_import_service.dart';
 import 'package:horizon/services/horizon_scheduler.dart';
 import 'package:horizon/services/notification_service.dart';
@@ -42,6 +44,8 @@ class AppDependencies {
   final MobilitySettingsStore mobilityStore;
   final ThemeSettingsStore themeStore;
   final ExplainabilityEngine explainability;
+  final GeocodingService geocoding;
+  final ElevationService elevation;
 
   const AppDependencies({
     required this.weatherService,
@@ -65,6 +69,8 @@ class AppDependencies {
     required this.mobilityStore,
     required this.themeStore,
     required this.explainability,
+    required this.geocoding,
+    required this.elevation,
   });
 
   factory AppDependencies.create() {
@@ -92,6 +98,8 @@ class AppDependencies {
       mobilityStore: MobilitySettingsStore(),
       themeStore: ThemeSettingsStore(),
       explainability: const ExplainabilityEngine(),
+      geocoding: GeocodingService(),
+      elevation: ElevationService(),
     );
   }
 }

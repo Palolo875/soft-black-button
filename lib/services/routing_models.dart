@@ -10,11 +10,18 @@ class RouteVariant {
   final double timeSeconds;
   final List<RouteWeatherSample> weatherSamples;
 
+  final double? elevationGain;
+  final double? elevationLoss;
+  final List<double>? elevationProfile;
+
   const RouteVariant({
     required this.kind,
     required this.shape,
     required this.lengthKm,
     required this.timeSeconds,
     required this.weatherSamples,
+    this.elevationGain,
+    this.elevationLoss,
+    this.elevationProfile,
   });
 }

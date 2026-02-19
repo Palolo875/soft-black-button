@@ -420,13 +420,17 @@ class RoutingProvider with ChangeNotifier {
 
       _routeStart = shape.first;
       _routeEnd = shape.last;
-      final v = RouteVariant(
+      final vBase = RouteVariant(
         kind: RouteVariantKind.imported,
         shape: shape,
         lengthKm: lenMeters / 1000.0,
         timeSeconds: (lenMeters / _speedMps()),
         weatherSamples: weatherSamples,
       );
+      
+      final variantsEnriched = await _routingEngine.enrichWithElevation([vBase]);
+      final v = variantsEnriched.first;
+      
       final explanation = _explainability.explain(v: v, allMetrics: {v.kind: _explainability.metricsFor(v)});
       _routeVariants = [v];
       _selectedVariant = RouteVariantKind.imported;

@@ -86,10 +86,27 @@ class WeatherProvider with ChangeNotifier {
     }
   }
 
-  void setStyleLoaded(bool loaded) {
+  Future<void> setStyleLoaded(bool loaded) async {
     _styleLoaded = loaded;
     if (loaded && _mapController != null) {
-      _weatherService.initWeather(controller: _mapController!);
+      final decision = _weatherDecision;
+      final lastPosition = _lastWeatherPosition;
+
+      if (decision != null && lastPosition != null) {
+        final snap = decision.now;
+        final angleRad = (snap.windDirection - 180) * pi / 180.0;
+        
+        await _weatherService.initWeather(
+          controller: _mapController!,
+          initialLat: lastPosition.latitude,
+          initialLng: lastPosition.longitude,
+          windSpeed: snap.windSpeed * 3.6, // m/s to km/h
+          windAngleRad: angleRad,
+        );
+      } else {
+        // Fallback if decision or lastPosition is null
+        _weatherService.initWeather(controller: _mapController!);
+      }
       _startWeatherAutoRefresh();
       unawaited(_mapRenderer.initLayers(_mapController!).then((_) => _renderExpertWeatherLayers()));
     }
@@ -161,6 +178,13 @@ class WeatherProvider with ChangeNotifier {
       _weatherDecision = decision;
       _weatherLoading = false;
       notifyListeners();
+
+      if (_styleLoaded) {
+        final snap = decision.now;
+        final angleRad = (snap.windDirection - 180) * pi / 180.0;
+        _weatherService.updateWithRealWind(snap.windSpeed * 3.6, angleRad);
+        _weatherService.move(position.latitude, position.longitude);
+      }
 
       _metrics.recordDuration('weather_decision_ms', sw.elapsedMilliseconds);
       _metrics.inc('weather_refresh');

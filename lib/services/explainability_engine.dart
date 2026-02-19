@@ -6,7 +6,7 @@ import 'package:horizon/services/weather_models.dart';
 
 enum ExplanationLevel { level1, level2 }
 
-enum ExplanationFactorKind { wind, rain, temperature, confidence, comfort }
+enum ExplanationFactorKind { wind, rain, temperature, confidence, comfort, elevation }
 
 class ExplanationFactor {
   final ExplanationFactorKind kind;
@@ -35,6 +35,8 @@ class RouteVariantMetrics {
     required this.rainKm,
     required this.extremeTempKm,
     required this.minComfort,
+    required this.elevationGain,
+    required this.elevationLoss,
   });
 }
 
@@ -65,6 +67,8 @@ class ExplainabilityEngine {
         rainKm: 0.0,
         extremeTempKm: 0.0,
         minComfort: 0.0,
+        elevationGain: 0.0,
+        elevationLoss: 0.0,
       );
     }
 
@@ -99,6 +103,8 @@ class ExplainabilityEngine {
       rainKm: rainKm,
       extremeTempKm: extremeTempKm,
       minComfort: minComfort.isFinite ? minComfort : 0.0,
+      elevationGain: v.elevationGain ?? 0.0,
+      elevationLoss: v.elevationLoss ?? 0.0,
     );
   }
 
@@ -150,6 +156,17 @@ class ExplainabilityEngine {
         kind: ExplanationFactorKind.comfort,
         title: 'Confort',
         detail: 'Minimum confort ${m.minComfort.toStringAsFixed(1)}/10',
+        severity: sev,
+      ));
+    }
+
+    // Elevation
+    if (m.elevationGain >= 100) {
+      final sev = (m.elevationGain / 1000.0).clamp(0.0, 1.0);
+      factors.add(ExplanationFactor(
+        kind: ExplanationFactorKind.elevation,
+        title: 'Dénivelé',
+        detail: 'Gain d\'élévation total : ${m.elevationGain.round()} m',
         severity: sev,
       ));
     }

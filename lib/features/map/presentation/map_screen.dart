@@ -29,6 +29,9 @@ import 'package:horizon/features/map/presentation/widgets/weather_status_pill.da
 import 'package:horizon/features/map/presentation/widgets/route_info_card.dart';
 import 'package:horizon/features/map/presentation/widgets/route_chip.dart';
 import 'package:horizon/features/map/presentation/widgets/offline_progress_bar.dart';
+import 'package:horizon/features/map/presentation/widgets/geocoding_selection_sheet.dart';
+import 'package:horizon/features/map/presentation/widgets/settings_sheet.dart';
+import 'package:horizon/features/map/presentation/widgets/home_today_dashboard_sheet.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -42,6 +45,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   VoidCallback? _connectivityListener;
   WeatherProvider? _weather;
   RoutingProvider? _routing;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -82,6 +86,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       conn.removeListener(listener);
     }
     WidgetsBinding.instance.removeObserver(this);
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -226,7 +231,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: 420,
-                  maxHeight: MediaQuery.sizeOf(context).height * (w >= HorizonBreakpoints.medium ? 0.70 : 0.52),
+                  maxHeight: MediaQuery.sizeOf(context).height * (w >= HorizonBreakpoints.medium ? 0.70 : 0.62),
                 ),
                 child: SingleChildScrollView(
                   reverse: true,
@@ -236,6 +241,16 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   ),
                 ),
               ),
+            ),
+          ),
+          
+          // ----- Top Search Bar -----
+          Positioned(
+            top: 10,
+            left: edgeInset,
+            right: edgeInset,
+            child: SafeArea(
+              child: _buildSearchBar(context, mapProvider, onSurfaceMuted, onSurfaceSubtle),
             ),
           ),
         ],
@@ -441,10 +456,11 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                     final ex = e.value;
                     final label = routeVariantLabel(e.key.name);
                     final selectedMark = e.key == routing.selectedVariant ? ' • sélectionnée' : '';
+                    final elev = ex.metrics.elevationGain.round();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Text(
-                        '$label$selectedMark — vent ${msToKmh(ex.metrics.avgWind).toStringAsFixed(0)} km/h, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
+                        '$label$selectedMark — elev +${elev}m, vent ${msToKmh(ex.metrics.avgWind).toStringAsFixed(0)} km/h, pluie ~${ex.metrics.rainKm.toStringAsFixed(1)} km, conf ${(ex.metrics.avgConfidence * 100).round()}%',
                         style: textTheme.bodySmall?.copyWith(color: body),
                       ),
                     );
@@ -562,6 +578,22 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         _fab(
+          heroTag: 'settings',
+          order: 1,
+          icon: Icons.tune_rounded,
+          tooltip: 'Réglages',
+          color: onSurfaceStrong,
+          onPressed: () => SettingsSheet.show(context),
+        ),
+        _fab(
+          heroTag: 'dashboard',
+          order: 1.5,
+          icon: Icons.dashboard_customize_outlined,
+          tooltip: 'Dashboard Journalier',
+          color: onSurfaceStrong,
+          onPressed: () => HomeTodayDashboardSheet.show(context),
+        ),
+        _fab(
           heroTag: 'pmtiles-pack',
           order: 2,
           icon: offline.pmtilesEnabled ? Icons.storage_rounded : Icons.storage_outlined,
@@ -632,24 +664,59 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
           color: onSurfaceStrong,
           onPressed: () => routing.importGpxRoute(),
         ),
-        FocusTraversalOrder(
-          order: const NumericFocusOrder(7),
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: glassDecoration(context, opacity: 0.85),
-            child: TextField(
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Où allez-vous ?',
-                hintStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(color: onSurfaceSubtle),
-                prefixIcon: Icon(Icons.search, color: onSurfaceMuted),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildSearchBar(
+    BuildContext context,
+    MapProvider mapProvider,
+    Color onSurfaceMuted,
+    Color onSurfaceSubtle,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: glassDecoration(context, opacity: 0.92).copyWith(
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: TextField(
+        controller: _searchController,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (query) async {
+          final results = await mapProvider.searchLocation(query);
+          if (!context.mounted) return;
+          if (results.length > 1) {
+            unawaited(GeocodingSelectionSheet.show(
+              context,
+              results: results,
+              onSelected: (r) => mapProvider.centerOnUser(r.location),
+            ));
+          } else if (results.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Aucun résultat pour "$query"')),
+            );
+          }
+          _searchController.clear();
+        },
+        decoration: InputDecoration(
+          hintText: 'Où allez-vous ?',
+          hintStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(color: onSurfaceSubtle, fontWeight: FontWeight.w600),
+          prefixIcon: mapProvider.geocodingLoading
+              ? Container(
+                  width: 20,
+                  height: 20,
+                  padding: const EdgeInsets.all(12),
+                  child: const CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(Icons.search, color: onSurfaceMuted),
+          suffixIcon: IconButton(
+            icon: Icon(Icons.close_rounded, color: onSurfaceMuted, size: 20),
+            onPressed: () => _searchController.clear(),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+      ),
     );
   }
 
