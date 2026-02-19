@@ -17,6 +17,7 @@ import 'package:horizon/services/route_compare_service.dart';
 import 'package:horizon/services/route_weather_projector.dart';
 import 'package:horizon/services/routing_engine.dart';
 import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/route_cache_helper.dart';
 import 'package:horizon/services/weather_models.dart';
 import 'package:horizon/services/route_geometry.dart';
 import 'package:horizon/services/notification_service.dart';
@@ -599,10 +600,8 @@ class RoutingProvider with ChangeNotifier {
   }
 
   String _routeCacheKey(LatLng start, LatLng end) {
-    double round(double v) => (v * HorizonConstants.routeCacheGridFactor).roundToDouble() / HorizonConstants.routeCacheGridFactor;
-    final mode = _travelMode().name;
-    final speedBucket = _speedBucketMps();
-    return 'v2_${mode}_s${speedBucket.toStringAsFixed(1)}_${round(start.latitude)}_${round(start.longitude)}__${round(end.latitude)}_${round(end.longitude)}';
+    final key = RouteCacheKey.fromLocations(start, end, _travelMode().name, _speedMps());
+    return key?.toKey() ?? '';
   }
 
   double _speedBucketMps() {
@@ -610,56 +609,16 @@ class RoutingProvider with ChangeNotifier {
   }
 
   String _routeCacheKeyLegacy(LatLng start, LatLng end) {
-    double round(double v) => (v * HorizonConstants.routeCacheGridFactor).roundToDouble() / HorizonConstants.routeCacheGridFactor;
-    return 'v1_${round(start.latitude)}_${round(start.longitude)}__${round(end.latitude)}_${round(end.longitude)}';
+    final key = RouteCacheKey.fromLocations(start, end, _travelMode().name, _speedMps());
+    return key?.toLegacyKey() ?? '';
   }
 
   Future<List<RouteVariant>?> _loadRouteCache(LatLng start, LatLng end) async {
     final key = _routeCacheKey(start, end);
-    final entry = await _routeCache.read(key) ?? await _routeCache.read(_routeCacheKeyLegacy(start, end));
+    final legacyKey = _routeCacheKeyLegacy(start, end);
+    final entry = await _routeCache.read(key) ?? await _routeCache.read(legacyKey);
     if (entry == null) return null;
-    final variantsRaw = entry.payload['variants'];
-    if (variantsRaw is! List) return null;
-
-    final out = <RouteVariant>[];
-    for (final raw in variantsRaw) {
-      if (raw is! Map) continue;
-      final kindRaw = raw['kind'];
-      final lengthRaw = raw['lengthKm'];
-      final timeRaw = raw['timeSeconds'];
-      final shapeRaw = raw['shape'];
-
-      if (kindRaw is! String || lengthRaw is! num || timeRaw is! num || shapeRaw is! List) continue;
-      RouteVariantKind? kind;
-      for (final k in RouteVariantKind.values) {
-        if (k.name == kindRaw) {
-          kind = k;
-          break;
-        }
-      }
-      if (kind == null) continue;
-
-      final shape = <LatLng>[];
-      for (final p in shapeRaw) {
-        if (p is! List || p.length != 2) continue;
-        final lon = p[0];
-        final lat = p[1];
-        if (lon is! num || lat is! num) continue;
-        shape.add(LatLng(lat.toDouble(), lon.toDouble()));
-      }
-      if (shape.length < 2) continue;
-
-      out.add(RouteVariant(
-        kind: kind,
-        shape: shape,
-        lengthKm: lengthRaw.toDouble(),
-        timeSeconds: timeRaw.toDouble(),
-        weatherSamples: const [],
-      ));
-    }
-
-    if (out.isEmpty) return null;
-    return out;
+    return RouteCacheSerializer.deserializeVariants(entry.payload);
   }
 
   Future<void> _saveRouteCache(LatLng start, LatLng end, List<RouteVariant> variants) async {
@@ -667,14 +626,7 @@ class RoutingProvider with ChangeNotifier {
     final payload = {
       'mode': _travelMode().name,
       'speedBucketMps': _speedBucketMps(),
-      'variants': variants
-          .map((v) => {
-                'kind': v.kind.name,
-                'lengthKm': v.lengthKm,
-                'timeSeconds': v.timeSeconds,
-                'shape': v.shape.map((p) => [p.longitude, p.latitude]).toList(),
-              })
-          .toList(),
+      ...RouteCacheSerializer.serializeVariants(variants),
     };
     await _routeCache.write(key, payload);
   }

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:horizon/core/constants/horizon_constants.dart';
 import 'package:horizon/core/errors/remote_service_exception.dart';
 import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/services/circuit_breaker.dart';
 import 'package:horizon/services/secure_http_client.dart';
 import 'package:http/http.dart' as http;
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -29,6 +30,7 @@ class ValhallaClient {
   final bool _allowHttp;
   final Duration _requestTimeout;
   final int _maxAttempts;
+  final CircuitBreaker _circuitBreaker;
 
   ValhallaClient({
     Uri? base,
@@ -41,7 +43,8 @@ class ValhallaClient {
         _pinsPem = _loadPinsPem(),
         _allowHttp = allowHttp,
         _requestTimeout = requestTimeout,
-        _maxAttempts = maxAttempts;
+        _maxAttempts = maxAttempts,
+        _circuitBreaker = CircuitBreakerRegistry().getOrCreate('valhalla');
 
   static List<String> _loadPinsPem() {
     const raw = String.fromEnvironment('VALHALLA_TLS_PINS_B64', defaultValue: '');
@@ -99,33 +102,34 @@ class ValhallaClient {
     final routePath = (base.path.endsWith('/') ? base.path.substring(0, base.path.length - 1) : base.path) + '/route';
     final postUri = base.replace(path: routePath, queryParameters: const {});
 
-    final response = await _requestWithRetry(
-      () => _http.postJson(
-        postUri,
-        body: jsonBody,
-        config: SecureHttpConfig(
-          requestTimeout: _requestTimeout,
-          allowHttp: _allowHttp,
-          pinnedServerCertificatesPem: _pinsPem,
-        ),
-      ),
-      fallback: () {
-        final getUri = base.replace(
-          path: routePath,
-          queryParameters: {
-            'json': jsonBody,
-          },
-        );
-        return _http.get(
-          getUri,
+    return _circuitBreaker.execute(() async {
+      final response = await _requestWithRetry(
+        () => _http.postJson(
+          postUri,
+          body: jsonBody,
           config: SecureHttpConfig(
             requestTimeout: _requestTimeout,
             allowHttp: _allowHttp,
             pinnedServerCertificatesPem: _pinsPem,
           ),
-        );
-      },
-    );
+        ),
+        fallback: () {
+          final getUri = base.replace(
+            path: routePath,
+            queryParameters: {
+              'json': jsonBody,
+            },
+          );
+          return _http.get(
+            getUri,
+            config: SecureHttpConfig(
+              requestTimeout: _requestTimeout,
+              allowHttp: _allowHttp,
+              pinnedServerCertificatesPem: _pinsPem,
+            ),
+          );
+        },
+      );
 
     if (response.statusCode != 200) {
       final msg = _extractValhallaErrorMessage(response);
@@ -176,6 +180,7 @@ class ValhallaClient {
       timeSeconds: time.toDouble(),
       raw: map,
     );
+    }); // circuit breaker
   }
 
   Future<http.Response> _requestWithRetry(
@@ -224,6 +229,27 @@ class ValhallaClient {
       return null;
     }
   }
+
+  Future<bool> isHealthy() async {
+    try {
+      final healthUri = base.replace(path: '${base.path}health');
+      final response = await _http.get(
+        healthUri,
+        config: SecureHttpConfig(
+          requestTimeout: const Duration(seconds: 5),
+          allowHttp: _allowHttp,
+          pinnedServerCertificatesPem: _pinsPem,
+        ),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  bool get isCircuitOpen => _circuitBreaker.isOpen;
+
+  CircuitState get circuitState => _circuitBreaker.state;
 }
 
 List<LatLng> decodePolyline6(String encoded) {
