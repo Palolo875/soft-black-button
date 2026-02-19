@@ -3,15 +3,15 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:app/services/weather_service.dart';
 
 class MapProvider with ChangeNotifier {
-  MaplibreMapController? _mapController;
+  MapLibreMapController? _mapController;
   bool _isStyleLoaded = false;
   final WeatherService _weatherService = WeatherService();
   double _timeOffset = 0.0;
 
-  MaplibreMapController? get mapController => _mapController;
+  MapLibreMapController? get mapController => _mapController;
   bool get isStyleLoaded => _isStyleLoaded;
 
-  void setController(MaplibreMapController controller) {
+  void setController(MapLibreMapController controller) {
     _mapController = controller;
     notifyListeners();
   }

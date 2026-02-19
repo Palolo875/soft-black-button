@@ -25,7 +25,7 @@ class WeatherService {
   final double baseLat = 48.8566;
   final double baseLng = 2.3522;
 
-  void initWeather(MaplibreMapController controller) async {
+  void initWeather(MapLibreMapController controller) async {
     // Créer les particules initiales
     for (int i = 0; i < 150; i++) {
       _particles.add(WindParticle(
@@ -91,7 +91,7 @@ class WeatherService {
     _timeOffset = offset;
   }
 
-  Future<void> _addOpportunities(MaplibreMapController controller) async {
+  Future<void> _addOpportunities(MapLibreMapController controller) async {
     final opportunities = {
       "type": "FeatureCollection",
       "features": [

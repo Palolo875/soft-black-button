@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:app/providers/map_provider.dart';
 
 class HorizonMap extends StatefulWidget {
-  final void Function(MaplibreMapController)? onMapCreated;
+  final void Function(MapLibreMapController)? onMapCreated;
 
   const HorizonMap({super.key, this.onMapCreated});
 
@@ -15,7 +15,6 @@ class HorizonMap extends StatefulWidget {
 }
 
 class _HorizonMapState extends State<HorizonMap> {
-  MaplibreMapController? _controller;
   bool _isPermissionGranted = false;
 
   @override
@@ -50,8 +49,7 @@ class _HorizonMapState extends State<HorizonMap> {
     });
   }
 
-  void _onMapCreated(MaplibreMapController controller) {
-    _controller = controller;
+  void _onMapCreated(MapLibreMapController controller) {
     _loadImages();
     if (widget.onMapCreated != null) {
       widget.onMapCreated!(controller);
@@ -65,7 +63,7 @@ class _HorizonMapState extends State<HorizonMap> {
 
   @override
   Widget build(BuildContext context) {
-    return MaplibreMap(
+    return MapLibreMap(
       // Sur le web, le chemin des assets est souvent préfixé par assets/
       styleString: kIsWeb
         ? "assets/assets/styles/horizon_style.json"
