@@ -11,12 +11,58 @@ import 'package:horizon/services/offline_registry.dart';
 import 'package:horizon/services/secure_http_client.dart';
 import 'package:horizon/core/log/app_log.dart';
 
+Future<void> pruneProxyCacheDir(
+  Directory dir, {
+  required int maxEntries,
+  required int maxBytes,
+}) async {
+  if (maxEntries <= 0 || maxBytes <= 0) return;
+  if (!await dir.exists()) return;
+
+  final files = <File>[];
+  int totalBytes = 0;
+  await for (final e in dir.list(recursive: false, followLinks: false)) {
+    if (e is! File) continue;
+    files.add(e);
+    try {
+      totalBytes += await e.length();
+    } catch (_) {}
+  }
+
+  if (files.length <= maxEntries && totalBytes <= maxBytes) return;
+
+  final metas = <(File, DateTime, int)>[];
+  for (final f in files) {
+    try {
+      final stat = await f.stat();
+      metas.add((f, stat.modified, stat.size));
+    } catch (_) {
+      metas.add((f, DateTime.fromMillisecondsSinceEpoch(0), 0));
+    }
+  }
+  metas.sort((a, b) => a.$2.compareTo(b.$2));
+
+  int count = metas.length;
+  int bytes = totalBytes;
+  for (final m in metas) {
+    if (count <= maxEntries && bytes <= maxBytes) break;
+    try {
+      await m.$1.delete();
+      count -= 1;
+      bytes -= m.$3;
+    } catch (_) {}
+  }
+}
+
 class OfflineService {
   HttpServer? _pmtilesServer;
   pm.PmTilesArchive? _pmtilesArchive;
   Uri? _proxyRemoteGlyphsBase;
   Uri? _proxyRemoteSpriteBase;
   Directory? _proxyCacheDir;
+
+  static const int _proxyCacheMaxEntries = 800;
+  static const int _proxyCacheMaxBytes = 80 * 1024 * 1024;
 
   final OfflineCore _offlineCore = OfflineCore();
   final SecureHttpClient _http = SecureHttpClient();
@@ -83,6 +129,16 @@ class OfflineService {
     _proxyCacheDir ??= Directory('${docsDir.path}/horizon_cache');
     if (!await _proxyCacheDir!.exists()) {
       await _proxyCacheDir!.create(recursive: true);
+    }
+
+    try {
+      await pruneProxyCacheDir(
+        _proxyCacheDir!,
+        maxEntries: _proxyCacheMaxEntries,
+        maxBytes: _proxyCacheMaxBytes,
+      );
+    } catch (e, st) {
+      AppLog.w('offline.proxyCache prune failed', error: e, stackTrace: st);
     }
 
     unawaited(() async {
@@ -242,6 +298,17 @@ class OfflineService {
       }
 
       await cachedFile.writeAsBytes(response.bodyBytes, flush: true);
+      try {
+        if (_proxyCacheDir != null) {
+          await pruneProxyCacheDir(
+            _proxyCacheDir!,
+            maxEntries: _proxyCacheMaxEntries,
+            maxBytes: _proxyCacheMaxBytes,
+          );
+        }
+      } catch (e, st) {
+        AppLog.w('offline.proxyCache pruneAfterWrite failed', error: e, stackTrace: st);
+      }
       request.response.statusCode = HttpStatus.ok;
       request.response.headers.set('Access-Control-Allow-Origin', '*');
       request.response.add(response.bodyBytes);

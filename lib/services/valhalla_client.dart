@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
-import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/constants/horizon_constants.dart';
+import 'package:horizon/core/errors/remote_service_exception.dart';
 import 'package:horizon/core/log/app_log.dart';
 import 'package:horizon/services/secure_http_client.dart';
 import 'package:http/http.dart' as http;
@@ -24,13 +26,22 @@ class ValhallaClient {
   final Uri base;
   final SecureHttpClient _http;
   final List<String> _pinsPem;
+  final bool _allowHttp;
+  final Duration _requestTimeout;
+  final int _maxAttempts;
 
   ValhallaClient({
     Uri? base,
     SecureHttpClient? httpClient,
+    bool allowHttp = const bool.fromEnvironment('VALHALLA_ALLOW_HTTP', defaultValue: false),
+    Duration requestTimeout = const Duration(seconds: 20),
+    int maxAttempts = 2,
   })  : base = base ?? _defaultBase(),
         _http = httpClient ?? SecureHttpClient(),
-        _pinsPem = _loadPinsPem();
+        _pinsPem = _loadPinsPem(),
+        _allowHttp = allowHttp,
+        _requestTimeout = requestTimeout,
+        _maxAttempts = maxAttempts;
 
   static List<String> _loadPinsPem() {
     const raw = String.fromEnvironment('VALHALLA_TLS_PINS_B64', defaultValue: '');
@@ -88,55 +99,76 @@ class ValhallaClient {
     final routePath = (base.path.endsWith('/') ? base.path.substring(0, base.path.length - 1) : base.path) + '/route';
     final postUri = base.replace(path: routePath, queryParameters: const {});
 
-    http.Response response;
-    try {
-      response = await _http.postJson(
+    final response = await _requestWithRetry(
+      () => _http.postJson(
         postUri,
         body: jsonBody,
         config: SecureHttpConfig(
-          requestTimeout: const Duration(seconds: 30),
+          requestTimeout: _requestTimeout,
+          allowHttp: _allowHttp,
           pinnedServerCertificatesPem: _pinsPem,
         ),
-      );
-    } catch (e, st) {
-      AppLog.w('valhalla.post failed, falling back to GET', error: e, stackTrace: st);
-      final getUri = base.replace(
-        path: routePath,
-        queryParameters: {
-          'json': jsonBody,
-        },
-      );
-      response = await _http.get(
-        getUri,
-        config: SecureHttpConfig(
-          requestTimeout: const Duration(seconds: 30),
-          pinnedServerCertificatesPem: _pinsPem,
-        ),
-      );
-    }
+      ),
+      fallback: () {
+        final getUri = base.replace(
+          path: routePath,
+          queryParameters: {
+            'json': jsonBody,
+          },
+        );
+        return _http.get(
+          getUri,
+          config: SecureHttpConfig(
+            requestTimeout: _requestTimeout,
+            allowHttp: _allowHttp,
+            pinnedServerCertificatesPem: _pinsPem,
+          ),
+        );
+      },
+    );
+
     if (response.statusCode != 200) {
-      throw Exception('Valhalla HTTP ${response.statusCode}');
+      final msg = _extractValhallaErrorMessage(response);
+      throw RemoteServiceException(
+        service: 'Valhalla',
+        statusCode: response.statusCode,
+        message: msg ?? 'Service de routage indisponible.',
+      );
     }
 
     final decoded = json.decode(response.body);
-    if (decoded is! Map) throw Exception('Valhalla invalid response');
+    if (decoded is! Map) {
+      throw const RemoteServiceException(service: 'Valhalla', message: 'Réponse du service de routage invalide.');
+    }
     final map = Map<String, dynamic>.from(decoded as Map);
     final trip = map['trip'];
-    if (trip is! Map) throw Exception('Valhalla missing trip');
+    if (trip is! Map) {
+      throw const RemoteServiceException(service: 'Valhalla', message: 'Réponse du service de routage incomplète.');
+    }
 
     final legs = trip['legs'];
-    if (legs is! List || legs.isEmpty) throw Exception('Valhalla missing legs');
+    if (legs is! List || legs.isEmpty) {
+      throw const RemoteServiceException(service: 'Valhalla', message: 'Route introuvable.');
+    }
     final leg0 = legs.first;
-    if (leg0 is! Map) throw Exception('Valhalla leg invalid');
+    if (leg0 is! Map) {
+      throw const RemoteServiceException(service: 'Valhalla', message: 'Route introuvable.');
+    }
 
     final shapeEnc = leg0['shape'];
-    if (shapeEnc is! String) throw Exception('Valhalla missing shape');
+    if (shapeEnc is! String) {
+      throw const RemoteServiceException(service: 'Valhalla', message: 'Route introuvable.');
+    }
 
     final summary = trip['summary'];
-    if (summary is! Map) throw Exception('Valhalla missing summary');
+    if (summary is! Map) {
+      throw const RemoteServiceException(service: 'Valhalla', message: 'Réponse du service de routage incomplète.');
+    }
     final length = summary['length'];
     final time = summary['time'];
-    if (length is! num || time is! num) throw Exception('Valhalla invalid summary');
+    if (length is! num || time is! num) {
+      throw const RemoteServiceException(service: 'Valhalla', message: 'Réponse du service de routage incomplète.');
+    }
 
     return ValhallaRouteResult(
       shape: decodePolyline6(shapeEnc),
@@ -144,6 +176,53 @@ class ValhallaClient {
       timeSeconds: time.toDouble(),
       raw: map,
     );
+  }
+
+  Future<http.Response> _requestWithRetry(
+    Future<http.Response> Function() request, {
+    Future<http.Response> Function()? fallback,
+  }) async {
+    Object? lastError;
+    for (int attempt = 0; attempt < _maxAttempts; attempt++) {
+      try {
+        return await request();
+      } catch (e, st) {
+        lastError = e;
+        if (fallback != null) {
+          try {
+            return await fallback();
+          } catch (e2, st2) {
+            lastError = e2;
+            AppLog.w('valhalla.request failed', error: e2, stackTrace: st2, props: {'attempt': attempt + 1});
+          }
+        } else {
+          AppLog.w('valhalla.request failed', error: e, stackTrace: st, props: {'attempt': attempt + 1});
+        }
+        if (attempt < _maxAttempts - 1) {
+          final backoffMs = 250 * (1 << attempt);
+          await Future.delayed(Duration(milliseconds: backoffMs));
+        }
+      }
+    }
+    throw RemoteServiceException(
+      service: 'Valhalla',
+      message: 'Service de routage indisponible.',
+    );
+  }
+
+  String? _extractValhallaErrorMessage(http.Response response) {
+    try {
+      final decoded = json.decode(response.body);
+      if (decoded is! Map) return null;
+      final m = Map<String, dynamic>.from(decoded as Map);
+      final err = m['error'];
+      if (err is String && err.trim().isNotEmpty) return err;
+      final msg = m['message'];
+      if (msg is String && msg.trim().isNotEmpty) return msg;
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -164,7 +243,7 @@ List<LatLng> decodePolyline6(String encoded) {
     index = lngRes.$2;
     lng += dLng;
 
-    coordinates.add(LatLng(lat / CyclingConstants.polyline6Precision, lng / CyclingConstants.polyline6Precision));
+    coordinates.add(LatLng(lat / HorizonConstants.polyline6Precision, lng / HorizonConstants.polyline6Precision));
   }
 
   return coordinates;

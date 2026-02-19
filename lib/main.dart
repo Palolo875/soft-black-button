@@ -12,6 +12,9 @@ import 'package:horizon/providers/location_provider.dart';
 import 'package:horizon/providers/weather_provider.dart';
 import 'package:horizon/providers/routing_provider.dart';
 import 'package:horizon/providers/offline_provider.dart';
+import 'package:horizon/providers/mobility_provider.dart';
+import 'package:horizon/providers/home_today_provider.dart';
+import 'package:horizon/providers/trip_provider.dart';
 
 void main() {
   final deps = AppDependencies.create();
@@ -32,12 +35,15 @@ class HorizonApp extends StatelessWidget {
       providers: [
         Provider<AppDependencies>.value(value: deps),
         ChangeNotifierProvider(
+          create: (_) => MobilityProvider(store: deps.mobilityStore)..load(),
+        ),
+        ChangeNotifierProvider(
           create: (_) => ConnectivityProvider()..init(),
         ),
         ChangeNotifierProvider(
           create: (_) => LocationProvider(),
         ),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<MobilityProvider, WeatherProvider>(
           create: (_) => WeatherProvider(
             weatherService: deps.weatherService,
             weatherEngine: deps.weatherEngine,
@@ -45,8 +51,12 @@ class HorizonApp extends StatelessWidget {
             metrics: deps.metrics,
             analytics: deps.analytics,
           ),
+          update: (_, mobility, weather) {
+            weather?.attachMobility(mobility);
+            return weather!;
+          },
         ),
-        ChangeNotifierProvider(
+        ChangeNotifierProxyProvider<MobilityProvider, RoutingProvider>(
           create: (_) => RoutingProvider(
             routingEngine: deps.routingEngine,
             routeCache: deps.routeCache,
@@ -59,6 +69,10 @@ class HorizonApp extends StatelessWidget {
             explainability: deps.explainability,
             notifications: deps.notifications,
           ),
+          update: (_, mobility, routing) {
+            routing?.attachMobility(mobility);
+            return routing!;
+          },
         ),
         ChangeNotifierProvider(
           create: (_) => OfflineProvider(
@@ -73,6 +87,28 @@ class HorizonApp extends StatelessWidget {
             notificationStore: deps.notificationStore,
             themeStore: deps.themeStore,
           ),
+        ),
+        ChangeNotifierProxyProvider<AppSettingsProvider, HomeTodayProvider>(
+          create: (_) => HomeTodayProvider(
+            store: deps.homeTodayStore,
+            engine: deps.homeTodayEngine,
+            notifications: deps.notifications,
+          )..load(),
+          update: (_, settings, home) {
+            home?.syncNotificationsEnabledFromSettings(settings.notificationsEnabled);
+            return home!;
+          },
+        ),
+        ChangeNotifierProxyProvider2<MobilityProvider, ConnectivityProvider, TripProvider>(
+          create: (_) => TripProvider(
+            engine: deps.tripEngine,
+            store: deps.tripStore,
+          )..load(),
+          update: (_, mobility, connectivity, trip) {
+            trip?.attachMobility(mobility);
+            trip?.syncIsOnline(connectivity.isOnline);
+            return trip!;
+          },
         ),
         ChangeNotifierProxyProvider<RoutingProvider, MapProvider>(
           create: (_) => MapProvider(

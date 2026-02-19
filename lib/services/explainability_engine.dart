@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/constants/horizon_constants.dart';
 import 'package:horizon/services/routing_models.dart';
 import 'package:horizon/services/weather_models.dart';
 
@@ -85,7 +85,7 @@ class ExplainabilityEngine {
       final t = s.snapshot.apparentTemperature.isFinite
           ? s.snapshot.apparentTemperature
           : s.snapshot.temperature;
-      if (t <= CyclingConstants.tempExtremelyCold || t >= CyclingConstants.tempExtremelyHot) extremeTempCount++;
+      if (t <= HorizonConstants.tempExtremelyCold || t >= HorizonConstants.tempExtremelyHot) extremeTempCount++;
     }
 
     final n = v.weatherSamples.length;
@@ -111,8 +111,8 @@ class ExplainabilityEngine {
     final factors = <ExplanationFactor>[];
 
     // Wind
-    if (m.avgWind >= CyclingConstants.windBreezy) {
-      final sev = ((m.avgWind - CyclingConstants.windBreezy) / 10.0).clamp(0.0, 1.0);
+    if (m.avgWind >= HorizonConstants.windBreezy) {
+      final sev = ((m.avgWind - HorizonConstants.windBreezy) / 10.0).clamp(0.0, 1.0);
       factors.add(ExplanationFactor(
         kind: ExplanationFactorKind.wind,
         title: 'Vent',
@@ -122,7 +122,7 @@ class ExplainabilityEngine {
     }
 
     // Rain
-    if (m.rainKm >= max(CyclingConstants.routeImpactMinDistanceKm, v.lengthKm * CyclingConstants.routeImpactDistanceRatio)) {
+    if (m.rainKm >= max(HorizonConstants.routeImpactMinDistanceKm, v.lengthKm * HorizonConstants.routeImpactDistanceRatio)) {
       final sev = (m.rainKm / max(1.0, v.lengthKm)).clamp(0.0, 1.0);
       factors.add(ExplanationFactor(
         kind: ExplanationFactorKind.rain,
@@ -133,7 +133,7 @@ class ExplainabilityEngine {
     }
 
     // Temperature
-    if (m.extremeTempKm >= max(CyclingConstants.routeImpactMinDistanceKm, v.lengthKm * CyclingConstants.routeImpactDistanceRatio)) {
+    if (m.extremeTempKm >= max(HorizonConstants.routeImpactMinDistanceKm, v.lengthKm * HorizonConstants.routeImpactDistanceRatio)) {
       final sev = (m.extremeTempKm / max(1.0, v.lengthKm)).clamp(0.0, 1.0);
       factors.add(ExplanationFactor(
         kind: ExplanationFactorKind.temperature,
@@ -144,8 +144,8 @@ class ExplainabilityEngine {
     }
 
     // Comfort
-    if (m.minComfort <= CyclingConstants.comfortThresholdBad) {
-      final sev = ((CyclingConstants.comfortThresholdBad - m.minComfort) / CyclingConstants.comfortThresholdBad).clamp(0.0, 1.0);
+    if (m.minComfort <= HorizonConstants.comfortThresholdBad) {
+      final sev = ((HorizonConstants.comfortThresholdBad - m.minComfort) / HorizonConstants.comfortThresholdBad).clamp(0.0, 1.0);
       factors.add(ExplanationFactor(
         kind: ExplanationFactorKind.comfort,
         title: 'Confort',
@@ -156,9 +156,9 @@ class ExplainabilityEngine {
 
     // Confidence as a factor when low (anti-overtrust)
     String? caveat;
-    if (m.avgConfidence < CyclingConstants.comfortThresholdUncertain) {
+    if (m.avgConfidence < HorizonConstants.comfortThresholdUncertain) {
       caveat = 'Incertitude élevée : ces estimations peuvent varier localement.';
-      final sev = ((CyclingConstants.comfortThresholdUncertain - m.avgConfidence) / CyclingConstants.comfortThresholdUncertain).clamp(0.0, 1.0);
+      final sev = ((HorizonConstants.comfortThresholdUncertain - m.avgConfidence) / HorizonConstants.comfortThresholdUncertain).clamp(0.0, 1.0);
       factors.add(ExplanationFactor(
         kind: ExplanationFactorKind.confidence,
         title: 'Fiabilité',
@@ -196,7 +196,7 @@ class ExplainabilityEngine {
     if (rainBetter) return 'Moins exposée à la pluie (estimé)';
     if (windBetter) return 'Moins exposée au vent (estimé)';
 
-    if (m.avgConfidence < CyclingConstants.comfortThresholdUncertain) return 'Météo incertaine : prudence recommandée';
+    if (m.avgConfidence < HorizonConstants.comfortThresholdUncertain) return 'Météo incertaine : prudence recommandée';
     return 'Conditions globales estimées';
   }
 }

@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/constants/horizon_constants.dart';
 import 'package:horizon/services/comfort_profile.dart';
 import 'package:horizon/services/route_geometry.dart';
 import 'package:horizon/services/weather_models.dart';
@@ -88,18 +88,17 @@ class ComfortModel {
 
     double penalty = 0.0;
 
-    final r = s.precipitation;
-    double rainPenalty;
-    if (r <= CyclingConstants.rainLight) {
-      rainPenalty = 0.0;
-    } else if (r <= CyclingConstants.rainModerate) {
-      rainPenalty = 1.5;
-    } else if (r <= CyclingConstants.rainHeavy) {
-      rainPenalty = 3.5;
-    } else if (r <= CyclingConstants.rainExtreme) {
-      rainPenalty = 6.0;
-    } else {
-      rainPenalty = 8.0;
+    double rainPenalty = 0.0;
+    if (s.precipitation >= HorizonConstants.rainLight) {
+      if (s.precipitation >= HorizonConstants.rainExtreme) {
+        rainPenalty = 4.0;
+      } else if (s.precipitation >= HorizonConstants.rainHeavy) {
+        rainPenalty = 2.7;
+      } else if (s.precipitation >= HorizonConstants.rainModerate) {
+        rainPenalty = 1.4;
+      } else {
+        rainPenalty = 0.6;
+      }
     }
     rainPenalty *= profile.weightRain;
     penalty += rainPenalty;
@@ -108,7 +107,8 @@ class ComfortModel {
     }
 
     final t = s.apparentTemperature.isFinite ? s.apparentTemperature : s.temperature;
-    final dt = (t - CyclingConstants.comfortBaseTemperature).abs();
+    final base = HorizonConstants.comfortBaseTemperature;
+    final dt = (t - base).abs();
     var tempPenalty = min(5.0, pow(dt / 6.0, 1.3).toDouble());
     tempPenalty *= profile.weightTemperature;
     penalty += tempPenalty;
@@ -116,7 +116,7 @@ class ComfortModel {
       contributions.add(ComfortContribution(kind: ComfortContributionKind.temperature, label: 'Température', delta: -tempPenalty));
     }
 
-    final w = s.windSpeed;
+    final wind = s.windSpeed;
     double headwindness = 0.0;
     double crosswindness = 0.0;
     if (userHeadingDegrees != null) {
@@ -125,40 +125,39 @@ class ComfortModel {
       crosswindness = sin(rel * pi / 180.0).abs().clamp(0.0, 1.0);
     }
 
-    var headPenalty = 0.0;
-    if (headwindness > 0) {
-      headPenalty = min(6.0, (w / CyclingConstants.windModerate) * (1.0 + 0.8 * headwindness));
+    double headPenalty = 0.0;
+    if (headwindness > 0 && wind >= HorizonConstants.windModerate) {
+      final w = (wind - 6.0).clamp(0.0, 18.0);
+      headPenalty = (w * 0.12 * profile.weightHeadwind);
+      penalty += headPenalty;
     }
-    headPenalty *= profile.weightHeadwind;
-    penalty += headPenalty;
     if (headPenalty > 0.2) {
       contributions.add(ComfortContribution(kind: ComfortContributionKind.headwind, label: 'Vent de face', delta: -headPenalty));
     }
 
-    var crossPenalty = min(3.5, (w / 10.0) * crosswindness);
+    var crossPenalty = min(3.5, (wind / 10.0) * crosswindness);
     crossPenalty *= profile.weightCrosswind;
     penalty += crossPenalty;
     if (crossPenalty > 0.2) {
       contributions.add(ComfortContribution(kind: ComfortContributionKind.crosswind, label: 'Vent latéral', delta: -crossPenalty));
     }
 
-    if (t >= CyclingConstants.heatHumidityThreshold && s.humidity.isFinite) {
-      var humPenalty = min(1.5, (s.humidity - 60.0).clamp(0.0, 40.0) / 30.0);
-      humPenalty *= profile.weightHumidity;
-      penalty += humPenalty;
-      if (humPenalty > 0.15) {
-        contributions.add(ComfortContribution(kind: ComfortContributionKind.humidity, label: 'Humidité', delta: -humPenalty));
-      }
+    double humidityPenalty = 0.0;
+    if (t >= HorizonConstants.heatHumidityThreshold && s.humidity.isFinite) {
+      final heatHum = (t - HorizonConstants.heatHumidityThreshold).clamp(0.0, 14.0);
+      humidityPenalty = (heatHum * (s.humidity.clamp(0.0, 100.0) / 100.0) * 0.05 * profile.weightHumidity);
+      penalty += humidityPenalty;
+    }
+    if (humidityPenalty > 0.2) {
+      contributions.add(ComfortContribution(kind: ComfortContributionKind.humidity, label: 'Humidité', delta: -humidityPenalty));
     }
 
     final hour = atUtc.toLocal().hour;
-    final isNight = hour <= CyclingConstants.nightEndHour || hour >= CyclingConstants.nightStartHour;
-    if (isNight) {
-      final nightPenalty = 0.9 * profile.weightNight;
-      penalty += nightPenalty;
-      if (nightPenalty > 0.1) {
-        contributions.add(ComfortContribution(kind: ComfortContributionKind.night, label: 'Nuit', delta: -nightPenalty));
-      }
+    final isNight = hour <= HorizonConstants.nightEndHour || hour >= HorizonConstants.nightStartHour;
+    final nightPenalty = isNight ? (1.0 * profile.weightNight) : 0.0;
+    penalty += nightPenalty;
+    if (nightPenalty > 0.1) {
+      contributions.add(ComfortContribution(kind: ComfortContributionKind.night, label: 'Nuit', delta: -nightPenalty));
     }
 
     final comfort = (10.0 - penalty).clamp(1.0, 10.0);

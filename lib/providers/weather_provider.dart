@@ -4,8 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/constants/horizon_constants.dart';
 import 'package:horizon/core/format/confidence_label.dart';
+import 'package:horizon/core/format/friendly_error.dart';
 import 'package:horizon/core/log/app_log.dart';
 import 'package:horizon/services/analytics_service.dart';
 import 'package:horizon/services/horizon_scheduler.dart';
@@ -15,6 +16,7 @@ import 'package:horizon/services/weather_models.dart';
 import 'package:horizon/services/weather_service.dart';
 
 import 'package:horizon/services/weather_map_renderer.dart';
+import 'package:horizon/providers/mobility_provider.dart';
 
 class WeatherProvider with ChangeNotifier {
   final WeatherService _weatherService;
@@ -32,6 +34,8 @@ class WeatherProvider with ChangeNotifier {
   bool _appInForeground = true;
   bool? _isOnline;
   bool _navigationActive = false;
+
+  MobilityProvider? _mobility;
 
   Timer? _weatherRefreshTimer;
   LatLng? _lastWeatherPosition;
@@ -67,6 +71,11 @@ class WeatherProvider with ChangeNotifier {
         _metrics = metrics,
         _analytics = analytics,
         _mapRenderer = mapRenderer;
+
+  void attachMobility(MobilityProvider mobility) {
+    if (identical(_mobility, mobility)) return;
+    _mobility = mobility;
+  }
 
   void setController(MaplibreMapController controller) {
     _mapController = controller;
@@ -146,6 +155,7 @@ class WeatherProvider with ChangeNotifier {
       final decision = await _weatherEngine.getDecisionForPointAtTime(
         position,
         at: _forecastBaseUtc(),
+        comfortProfile: _mobility?.comfortProfile,
       );
       sw.stop();
       _weatherDecision = decision;
@@ -162,7 +172,7 @@ class WeatherProvider with ChangeNotifier {
         'userInitiated': userInitiated,
       });
       _weatherLoading = false;
-      _weatherError = e.toString();
+      _weatherError = friendlyError(e);
       notifyListeners();
 
       _metrics.inc('weather_error');
@@ -209,7 +219,7 @@ class WeatherProvider with ChangeNotifier {
 
   void _startWeatherAutoRefresh() {
     _weatherRefreshTimer?.cancel();
-    _weatherRefreshTimer = Timer.periodic(CyclingConstants.weatherAutoRefreshInterval, (_) {
+    _weatherRefreshTimer = Timer.periodic(HorizonConstants.weatherAutoRefreshInterval, (_) {
       final pos = _lastWeatherPosition;
       if (pos == null) return;
       if (!_appInForeground) return;

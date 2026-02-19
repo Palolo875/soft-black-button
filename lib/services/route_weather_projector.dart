@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:horizon/services/route_geometry.dart';
 import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/comfort_profile.dart';
 import 'package:horizon/services/weather_engine_sota.dart';
 import 'package:horizon/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -14,6 +15,7 @@ class RouteWeatherProjector {
     required List<LatLng> polyline,
     required DateTime departureTime,
     required double speedMetersPerSecond,
+    ComfortProfile? comfortProfile,
     double sampleEveryMeters = 1000,
     int maxSamples = 60,
   }) async {
@@ -28,6 +30,8 @@ class RouteWeatherProjector {
         : max(sampleEveryMeters, totalLen / (maxSamples - 1));
 
     final samples = _resamplePolyline(polyline, effectiveEvery);
+
+    await _engine.prefetchForecasts(samples);
 
     double total = 0.0;
     final out = <RouteWeatherSample>[];
@@ -48,6 +52,7 @@ class RouteWeatherProjector {
         samples[i],
         at: eta,
         userHeadingDegrees: heading,
+        comfortProfile: comfortProfile,
       );
 
       final rel = angleDiffDegrees(heading, decision.now.windDirection);

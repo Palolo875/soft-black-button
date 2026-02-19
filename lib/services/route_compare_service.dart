@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:horizon/services/route_weather_projector.dart';
 import 'package:horizon/services/routing_models.dart';
+import 'package:horizon/services/comfort_profile.dart';
 import 'package:horizon/services/weather_models.dart';
 
 class RouteDepartureComparison {
@@ -44,6 +45,7 @@ class RouteCompareService {
     required DateTime baseDepartureUtc,
     required double speedMetersPerSecond,
     required List<Duration> offsets,
+    ComfortProfile? comfortProfile,
     double sampleEveryMeters = 450,
     int maxSamples = 120,
   }) async {
@@ -55,6 +57,7 @@ class RouteCompareService {
         polyline: variant.shape,
         departureTime: dep,
         speedMetersPerSecond: speedMetersPerSecond,
+        comfortProfile: comfortProfile,
         sampleEveryMeters: sampleEveryMeters,
         maxSamples: maxSamples,
       );
@@ -69,6 +72,7 @@ class RouteCompareService {
     required RouteVariant variant,
     required DateTime baseDepartureUtc,
     required double speedMetersPerSecond,
+    ComfortProfile? comfortProfile,
     Duration horizon = const Duration(hours: 6),
     Duration step = const Duration(minutes: 20),
     double sampleEveryMeters = 450,
@@ -84,6 +88,7 @@ class RouteCompareService {
       baseDepartureUtc: baseDepartureUtc,
       speedMetersPerSecond: speedMetersPerSecond,
       offsets: offsets,
+      comfortProfile: comfortProfile,
       sampleEveryMeters: sampleEveryMeters,
       maxSamples: maxSamples,
     );

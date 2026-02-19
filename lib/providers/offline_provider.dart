@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:horizon/core/log/app_log.dart';
+import 'package:horizon/core/format/friendly_error.dart';
 import 'package:horizon/services/offline_registry.dart';
 import 'package:horizon/services/offline_service.dart';
 
@@ -59,7 +60,7 @@ class OfflineProvider with ChangeNotifier {
       notifyListeners();
     } catch (e, st) {
       AppLog.e('offline.uninstallCurrentPmtilesPack failed', error: e, stackTrace: st);
-      _pmtilesError = e.toString();
+      _pmtilesError = friendlyError(e);
       _pmtilesProgress = null;
       notifyListeners();
     }
@@ -124,7 +125,7 @@ class OfflineProvider with ChangeNotifier {
       AppLog.e('offline.enablePmtilesPack failed', error: e, stackTrace: st, props: {
         'fileName': fileName,
       });
-      _pmtilesError = '$regionNameForUi: ${e.toString()}';
+      _pmtilesError = '$regionNameForUi: ${friendlyError(e)}';
       _pmtilesProgress = null;
       notifyListeners();
     }
@@ -147,7 +148,7 @@ class OfflineProvider with ChangeNotifier {
       notifyListeners();
     } catch (e, st) {
       AppLog.e('offline.disablePmtilesPack failed', error: e, stackTrace: st);
-      _pmtilesError = e.toString();
+      _pmtilesError = friendlyError(e);
       _pmtilesProgress = null;
       notifyListeners();
     }
@@ -199,7 +200,7 @@ class OfflineProvider with ChangeNotifier {
       });
     } catch (e, st) {
       AppLog.e('offline.downloadVisibleRegion failed', error: e, stackTrace: st);
-      _offlineDownloadError = e.toString();
+      _offlineDownloadError = friendlyError(e);
       _offlineDownloadProgress = null;
       notifyListeners();
     }

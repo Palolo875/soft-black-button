@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/constants/horizon_constants.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -19,6 +19,9 @@ import 'package:horizon/services/routing_engine.dart';
 import 'package:horizon/services/notification_service.dart';
 import 'package:horizon/services/routing_map_renderer.dart';
 import 'package:horizon/core/format/confidence_label.dart';
+import 'package:horizon/core/format/friendly_error.dart';
+import 'package:horizon/providers/mobility_provider.dart';
+import 'package:horizon/core/mobility/travel_mode.dart';
 
 class RoutingProvider with ChangeNotifier {
   final RoutingEngine _routingEngine;
@@ -35,6 +38,9 @@ class RoutingProvider with ChangeNotifier {
 
   MaplibreMapController? _mapController;
   bool _styleLoaded = false;
+
+  MobilityProvider? _mobility;
+  VoidCallback? _mobilityListener;
 
   double _timeOffset = 0.0;
   bool _lowPowerMode = false;
@@ -102,6 +108,42 @@ class RoutingProvider with ChangeNotifier {
         _explainability = explainability,
         _notifications = notifications,
         _mapRenderer = mapRenderer;
+
+  void attachMobility(MobilityProvider mobility) {
+    if (identical(_mobility, mobility)) return;
+    final old = _mobility;
+    final oldListener = _mobilityListener;
+    if (old != null && oldListener != null) {
+      old.removeListener(oldListener);
+    }
+
+    _mobility = mobility;
+    _mobilityListener = _onMobilityChanged;
+    mobility.addListener(_mobilityListener!);
+  }
+
+  void _onMobilityChanged() {
+    _departureCompareCache = null;
+    _departureWindowCache = null;
+
+    if (_routeStart == null || _routeEnd == null) return;
+    if (!_styleLoaded) return;
+    if (_isOnline == false) return;
+
+    unawaited(computeRouteVariants());
+  }
+
+  double _speedMps() {
+    final m = _mobility;
+    if (m != null) return m.speedMetersPerSecond;
+    return HorizonConstants.defaultSpeedMps;
+  }
+
+  TravelMode _travelMode() {
+    final m = _mobility;
+    if (m != null) return m.mode;
+    return TravelMode.cycling;
+  }
 
   void setController(MaplibreMapController controller) {
     _mapController = controller;
@@ -182,7 +224,7 @@ class RoutingProvider with ChangeNotifier {
     notifyListeners();
     _renderRouteMarkers();
     _routeDebounce?.cancel();
-    _routeDebounce = Timer(CyclingConstants.routePointDebounce, () {
+    _routeDebounce = Timer(HorizonConstants.routePointDebounce, () {
       final snap = SchedulerSnapshot(
         appInForeground: _appInForeground,
         isOnline: _isOnline ?? true,
@@ -240,7 +282,7 @@ class RoutingProvider with ChangeNotifier {
 
     final now = DateTime.now();
     final last = _lastRouteComputeAt;
-    if (last != null && now.difference(last) < CyclingConstants.routeComputeThrottle) {
+    if (last != null && now.difference(last) < HorizonConstants.routeComputeThrottle) {
       return;
     }
     _lastRouteComputeAt = now;
@@ -279,9 +321,11 @@ class RoutingProvider with ChangeNotifier {
         start: start,
         end: end,
         departureTime: _forecastBaseUtc(),
-        speedMetersPerSecond: CyclingConstants.defaultSpeedMps,
-        sampleEveryMeters: _lowPowerMode ? CyclingConstants.sampleIntervalMetersLowPower : CyclingConstants.sampleIntervalMeters,
-        maxSamples: _lowPowerMode ? CyclingConstants.maxSamplesLowPower : CyclingConstants.maxSamples,
+        speedMetersPerSecond: _speedMps(),
+        mode: _travelMode(),
+        comfortProfile: _mobility?.comfortProfile,
+        sampleEveryMeters: _lowPowerMode ? HorizonConstants.sampleIntervalMetersLowPower : HorizonConstants.sampleIntervalMeters,
+        maxSamples: _lowPowerMode ? HorizonConstants.maxSamplesLowPower : HorizonConstants.maxSamples,
       );
       sw.stop();
 
@@ -316,7 +360,7 @@ class RoutingProvider with ChangeNotifier {
       }
 
       _routingLoading = false;
-      _routingError = e.toString();
+      _routingError = friendlyError(e);
       notifyListeners();
 
       _metrics.inc('routing_error');
@@ -340,7 +384,8 @@ class RoutingProvider with ChangeNotifier {
       final resObj = await _gpxImport.pickAndParse();
       if (resObj.isFailure) {
         _gpxImportLoading = false;
-        _gpxImportError = resObj.errorOrNull.toString();
+        final err = resObj.errorOrNull;
+        _gpxImportError = err == null ? 'Import GPX impossible.' : friendlyError(err);
         notifyListeners();
         return;
       }
@@ -363,9 +408,10 @@ class RoutingProvider with ChangeNotifier {
       final weatherSamples = await _routeWeatherProjector.projectAlongPolyline(
         polyline: shape,
         departureTime: _forecastBaseUtc(),
-        speedMetersPerSecond: CyclingConstants.defaultSpeedMps,
-        sampleEveryMeters: _lowPowerMode ? CyclingConstants.sampleIntervalMetersLowPower : CyclingConstants.sampleIntervalMeters,
-        maxSamples: _lowPowerMode ? CyclingConstants.maxSamplesLowPower : CyclingConstants.maxSamples,
+        speedMetersPerSecond: _speedMps(),
+        comfortProfile: _mobility?.comfortProfile,
+        sampleEveryMeters: _lowPowerMode ? HorizonConstants.sampleIntervalMetersLowPower : HorizonConstants.sampleIntervalMeters,
+        maxSamples: _lowPowerMode ? HorizonConstants.maxSamplesLowPower : HorizonConstants.maxSamples,
       );
 
       _routeStart = shape.first;
@@ -374,7 +420,7 @@ class RoutingProvider with ChangeNotifier {
         kind: RouteVariantKind.imported,
         shape: shape,
         lengthKm: lenMeters / 1000.0,
-        timeSeconds: (lenMeters / CyclingConstants.defaultSpeedMps),
+        timeSeconds: (lenMeters / _speedMps()),
         weatherSamples: weatherSamples,
       );
       final explanation = _explainability.explain(v: v, allMetrics: {v.kind: _explainability.metricsFor(v)});
@@ -406,17 +452,18 @@ class RoutingProvider with ChangeNotifier {
 
     final cache = _departureCompareCache;
     final now = DateTime.now();
-    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < CyclingConstants.departureCompareCacheTtl) {
+    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < HorizonConstants.departureCompareCacheTtl) {
       return cache.items;
     }
 
     return _routeCompare.compareDepartures(
       variant: v,
       baseDepartureUtc: _forecastBaseUtc(),
-      speedMetersPerSecond: CyclingConstants.defaultSpeedMps,
-      offsets: CyclingConstants.departureCompareOffsets,
-      sampleEveryMeters: _lowPowerMode ? CyclingConstants.sampleIntervalMetersLowPower : CyclingConstants.sampleIntervalMeters,
-      maxSamples: _lowPowerMode ? CyclingConstants.maxSamplesLowPower : CyclingConstants.maxSamples,
+      speedMetersPerSecond: _speedMps(),
+      offsets: HorizonConstants.departureCompareOffsets,
+      comfortProfile: _mobility?.comfortProfile,
+      sampleEveryMeters: _lowPowerMode ? HorizonConstants.sampleIntervalMetersLowPower : HorizonConstants.sampleIntervalMeters,
+      maxSamples: _lowPowerMode ? HorizonConstants.maxSamplesLowPower : HorizonConstants.maxSamples,
     ).then((items) {
       _departureCompareCache = _DepartureCompareCacheEntry(kind: v.kind, at: DateTime.now(), items: items);
       return items;
@@ -429,18 +476,19 @@ class RoutingProvider with ChangeNotifier {
 
     final cache = _departureWindowCache;
     final now = DateTime.now();
-    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < CyclingConstants.departureWindowCacheTtl) {
+    if (cache != null && cache.kind == v.kind && now.difference(cache.at) < HorizonConstants.departureWindowCacheTtl) {
       return cache.item;
     }
 
     final rec = await _routeCompare.recommendDepartureWindow(
       variant: v,
       baseDepartureUtc: _forecastBaseUtc(),
-      speedMetersPerSecond: CyclingConstants.defaultSpeedMps,
-      horizon: CyclingConstants.departureWindowHorizon,
-      step: CyclingConstants.departureWindowStep,
-      sampleEveryMeters: _lowPowerMode ? CyclingConstants.sampleIntervalMetersLowPower : CyclingConstants.sampleIntervalMeters,
-      maxSamples: _lowPowerMode ? CyclingConstants.maxSamplesLowPower : CyclingConstants.maxSamples,
+      speedMetersPerSecond: _speedMps(),
+      comfortProfile: _mobility?.comfortProfile,
+      horizon: HorizonConstants.departureWindowHorizon,
+      step: HorizonConstants.departureWindowStep,
+      sampleEveryMeters: _lowPowerMode ? HorizonConstants.sampleIntervalMetersLowPower : HorizonConstants.sampleIntervalMeters,
+      maxSamples: _lowPowerMode ? HorizonConstants.maxSamplesLowPower : HorizonConstants.maxSamples,
     );
     _departureWindowCache = _DepartureWindowCacheEntry(kind: v.kind, at: DateTime.now(), item: rec);
     return rec;
@@ -500,14 +548,15 @@ class RoutingProvider with ChangeNotifier {
 
     final now = DateTime.now();
     final last = _lastNotificationAt;
-    if (last != null && now.difference(last) < CyclingConstants.notificationCooldown) return;
-
+    if (last != null && now.difference(last) < HorizonConstants.notificationCooldown) {
+      return;
+    }
     // Find first reasonably confident rain risk in the next 45 minutes.
-    final horizon = now.toUtc().add(CyclingConstants.weatherAlertHorizon);
+    final horizon = now.toUtc().add(HorizonConstants.weatherAlertHorizon);
     for (final s in v.weatherSamples) {
       if (s.eta.isAfter(horizon)) break;
-      if (s.confidence < CyclingConstants.rainAlertMinConfidence) continue;
-      if (s.snapshot.precipitation < CyclingConstants.rainAlertThresholdMm) continue;
+      if (s.confidence < HorizonConstants.rainAlertMinConfidence) continue;
+      if (s.snapshot.precipitation < HorizonConstants.rainAlertThresholdMm) continue;
 
       final etaLocal = s.eta.toLocal();
       final hh = etaLocal.hour.toString().padLeft(2, '0');
@@ -547,13 +596,24 @@ class RoutingProvider with ChangeNotifier {
   }
 
   String _routeCacheKey(LatLng start, LatLng end) {
-    double round(double v) => (v * CyclingConstants.routeCacheGridFactor).roundToDouble() / CyclingConstants.routeCacheGridFactor;
+    double round(double v) => (v * HorizonConstants.routeCacheGridFactor).roundToDouble() / HorizonConstants.routeCacheGridFactor;
+    final mode = _travelMode().name;
+    final speedBucket = _speedBucketMps();
+    return 'v2_${mode}_s${speedBucket.toStringAsFixed(1)}_${round(start.latitude)}_${round(start.longitude)}__${round(end.latitude)}_${round(end.longitude)}';
+  }
+
+  double _speedBucketMps() {
+    return (_speedMps() * 2).round() / 2;
+  }
+
+  String _routeCacheKeyLegacy(LatLng start, LatLng end) {
+    double round(double v) => (v * HorizonConstants.routeCacheGridFactor).roundToDouble() / HorizonConstants.routeCacheGridFactor;
     return 'v1_${round(start.latitude)}_${round(start.longitude)}__${round(end.latitude)}_${round(end.longitude)}';
   }
 
   Future<List<RouteVariant>?> _loadRouteCache(LatLng start, LatLng end) async {
     final key = _routeCacheKey(start, end);
-    final entry = await _routeCache.read(key);
+    final entry = await _routeCache.read(key) ?? await _routeCache.read(_routeCacheKeyLegacy(start, end));
     if (entry == null) return null;
     final variantsRaw = entry.payload['variants'];
     if (variantsRaw is! List) return null;
@@ -602,6 +662,8 @@ class RoutingProvider with ChangeNotifier {
   Future<void> _saveRouteCache(LatLng start, LatLng end, List<RouteVariant> variants) async {
     final key = _routeCacheKey(start, end);
     final payload = {
+      'mode': _travelMode().name,
+      'speedBucketMps': _speedBucketMps(),
       'variants': variants
           .map((v) => {
                 'kind': v.kind.name,
@@ -616,8 +678,48 @@ class RoutingProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    final m = _mobility;
+    final l = _mobilityListener;
+    if (m != null && l != null) {
+      m.removeListener(l);
+    }
     _routeDebounce?.cancel();
     super.dispose();
+  }
+
+  void showExternalRoute({
+    required RouteVariant variant,
+    String? name,
+  }) {
+    final shape = variant.shape;
+    if (shape.length < 2) return;
+
+    _routeStart = shape.first;
+    _routeEnd = shape.last;
+
+    final v = RouteVariant(
+      kind: RouteVariantKind.imported,
+      shape: shape,
+      lengthKm: variant.lengthKm,
+      timeSeconds: variant.timeSeconds,
+      weatherSamples: variant.weatherSamples,
+      meta: variant.meta,
+    );
+
+    final explanation = _explainability.explain(v: v, allMetrics: {v.kind: _explainability.metricsFor(v)});
+    _routeVariants = [v];
+    _selectedVariant = RouteVariantKind.imported;
+    _routeExplanation = null;
+    _routeExplanations = {RouteVariantKind.imported: explanation};
+    _gpxRouteName = name;
+    _routingError = null;
+    _departureCompareCache = null;
+    _departureWindowCache = null;
+    notifyListeners();
+
+    _renderRouteMarkers();
+    _renderSelectedRoute();
+    unawaited(_evaluateAndNotifyContextual());
   }
 }
 

@@ -118,18 +118,14 @@ class SecureHttpClient {
 
   Future<http.StreamedResponse> send(http.BaseRequest request, {SecureHttpConfig? config}) async {
     final cfg = config ?? this.config;
-    final validated = _validate(request.url, cfg);
-    final newReq = http.Request(request.method, validated)
-      ..headers.addAll(request.headers)
-      ..followRedirects = true
-      ..maxRedirects = 5;
+    _validate(request.url, cfg);
 
-    if (request is http.Request) {
-      newReq.bodyBytes = request.bodyBytes;
+    if (!request.headers.containsKey('Accept')) {
+      request.headers['Accept'] = 'application/json';
     }
 
     final client = _clientFor(cfg);
-    final f = client.send(newReq);
+    final f = client.send(request);
     return f.timeout(cfg.requestTimeout);
   }
 

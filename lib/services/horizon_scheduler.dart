@@ -1,4 +1,4 @@
-import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/constants/horizon_constants.dart';
 
 class SchedulerSnapshot {
   final bool appInForeground;
@@ -28,8 +28,8 @@ class HorizonScheduler {
   DateTime? _lastWeather;
   DateTime? _lastRouting;
 
-  Duration weatherCooldown = CyclingConstants.weatherCooldownNormal;
-  Duration routingCooldown = CyclingConstants.routingCooldownNormal;
+  Duration weatherCooldown = HorizonConstants.weatherCooldownNormal;
+  Duration routingCooldown = HorizonConstants.routingCooldownNormal;
 
   ComputeLevel levelFor(SchedulerSnapshot s) {
     if (!s.appInForeground) return ComputeLevel.inactive;
@@ -48,7 +48,7 @@ class HorizonScheduler {
       return true;
     }
 
-    final cd = s.lowPowerMode ? CyclingConstants.weatherCooldownLowPower : weatherCooldown;
+    final cd = s.lowPowerMode ? HorizonConstants.weatherCooldownLowPower : weatherCooldown;
     final last = _lastWeather;
     if (last == null || now.difference(last) >= cd) {
       _lastWeather = now;
@@ -68,7 +68,7 @@ class HorizonScheduler {
       return true;
     }
 
-    final cd = s.lowPowerMode ? CyclingConstants.routingCooldownLowPower : routingCooldown;
+    final cd = s.lowPowerMode ? HorizonConstants.routingCooldownLowPower : routingCooldown;
     final last = _lastRouting;
     if (last == null || now.difference(last) >= cd) {
       _lastRouting = now;

@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:horizon/core/constants/cycling_constants.dart';
+import 'package:horizon/core/constants/horizon_constants.dart';
 import 'package:horizon/core/log/app_log.dart';
 import 'package:horizon/services/metno_adapter.dart';
 import 'package:horizon/services/open_meteo_adapter.dart';
@@ -10,6 +10,70 @@ import 'package:horizon/services/comfort_profile_store.dart';
 import 'package:horizon/services/weather_cache.dart';
 import 'package:horizon/services/weather_models.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+
+Map<String, dynamic> mapMetNoToOpenMeteoShape(Map<String, dynamic> met) {
+  final props = met['properties'];
+  if (props is! Map) throw Exception('Met.no: missing properties');
+  final timeseries = props['timeseries'];
+  if (timeseries is! List) throw Exception('Met.no: missing timeseries');
+
+  final time = <String>[];
+  final temperature = <double>[];
+  final apparent = <double>[];
+  final precipitation = <double>[];
+  final humidity = <double>[];
+  final cloud = <double>[];
+  final pressure = <double>[];
+  final windSpeed = <double>[];
+  final windDir = <double>[];
+
+  for (final item in timeseries.take(72)) {
+    if (item is! Map) continue;
+    final t = item['time'];
+    final data = item['data'];
+    if (t is! String || data is! Map) continue;
+    final instant = data['instant'];
+    final next1h = data['next_1_hours'];
+    if (instant is! Map) continue;
+    final details = instant['details'];
+    if (details is! Map) continue;
+
+    double numVal(dynamic v, [double fallback = double.nan]) => (v is num) ? v.toDouble() : fallback;
+
+    time.add(t);
+    final temp = numVal(details['air_temperature']);
+    temperature.add(temp);
+    apparent.add(temp);
+    windSpeed.add(numVal(details['wind_speed']));
+    windDir.add(numVal(details['wind_from_direction']));
+    humidity.add(numVal(details['relative_humidity']));
+    cloud.add(numVal(details['cloud_area_fraction']));
+    pressure.add(numVal(details['air_pressure_at_sea_level']));
+
+    double p1h = 0.0;
+    if (next1h is Map) {
+      final pDetails = next1h['details'];
+      if (pDetails is Map) {
+        p1h = numVal(pDetails['precipitation_amount'], 0.0);
+      }
+    }
+    precipitation.add(p1h);
+  }
+
+  return {
+    'hourly': {
+      'time': time,
+      'temperature_2m': temperature,
+      'apparent_temperature': apparent,
+      'precipitation': precipitation,
+      'relativehumidity_2m': humidity,
+      'cloudcover': cloud,
+      'pressure_msl': pressure,
+      'windspeed_10m': windSpeed,
+      'winddirection_10m': windDir,
+    },
+  };
+}
 
 class WeatherEngineSota {
   final OpenMeteoAdapter _openMeteo;
@@ -42,18 +106,47 @@ class WeatherEngineSota {
   }
 
   static String cacheKeyFor(LatLng p) {
-    double round(double v) => (v * CyclingConstants.cacheGridFactor).roundToDouble() / CyclingConstants.cacheGridFactor;
+    double round(double v) => (v * HorizonConstants.cacheGridFactor).roundToDouble() / HorizonConstants.cacheGridFactor;
     return 'v2_${round(p.latitude)}_${round(p.longitude)}';
+  }
+
+  Future<void> prefetchForecast(LatLng point) async {
+    final key = cacheKeyFor(point);
+    final cached = await _cache.read(key);
+    if (cached != null) return;
+    final payload = await _fetchWithFallback(point);
+    await _cache.write(key, payload);
+  }
+
+  Future<void> prefetchForecasts(List<LatLng> points, {int maxConcurrent = 6}) async {
+    if (points.isEmpty) return;
+    final unique = <String, LatLng>{};
+    for (final p in points) {
+      unique[cacheKeyFor(p)] = p;
+    }
+    final list = unique.values.toList();
+
+    assert(() {
+      AppLog.d('weatherEngine.prefetchForecasts', props: {'points': points.length, 'unique': list.length});
+      return true;
+    }());
+
+    for (int i = 0; i < list.length; i += maxConcurrent) {
+      final chunk = list.sublist(i, (i + maxConcurrent) > list.length ? list.length : (i + maxConcurrent));
+      await Future.wait(chunk.map(prefetchForecast));
+    }
   }
 
   Future<WeatherDecision> getDecisionForPoint(
     LatLng point, {
     double? userHeadingDegrees,
+    ComfortProfile? comfortProfile,
   }) async {
     return getDecisionForPointAtTime(
       point,
       at: DateTime.now().toUtc(),
       userHeadingDegrees: userHeadingDegrees,
+      comfortProfile: comfortProfile,
     );
   }
 
@@ -61,6 +154,7 @@ class WeatherEngineSota {
     LatLng point, {
     required DateTime at,
     double? userHeadingDegrees,
+    ComfortProfile? comfortProfile,
   }) async {
     final key = cacheKeyFor(point);
 
@@ -75,7 +169,7 @@ class WeatherEngineSota {
 
     final weatherPoint = _normalize(point, payload);
     final snap = _pickNearest(weatherPoint, at.toUtc());
-    final profile = await _profile();
+    final profile = comfortProfile ?? await _profile();
     final breakdown = _comfortModel.compute(
       s: snap,
       userHeadingDegrees: userHeadingDegrees,
@@ -107,73 +201,8 @@ class WeatherEngineSota {
         longitude: p.longitude,
         userAgent: _metNoUserAgent,
       );
-      return _mapMetNoToOpenMeteoShape(metPayload);
+      return mapMetNoToOpenMeteoShape(metPayload);
     }
-  }
-
-  // Convert Met.no compact response into a subset shaped like Open-Meteo hourly.
-  Map<String, dynamic> _mapMetNoToOpenMeteoShape(Map<String, dynamic> met) {
-    final props = met['properties'];
-    if (props is! Map) throw Exception('Met.no: missing properties');
-    final timeseries = props['timeseries'];
-    if (timeseries is! List) throw Exception('Met.no: missing timeseries');
-
-    final time = <String>[];
-    final temperature = <double>[];
-    final apparent = <double>[];
-    final precipitation = <double>[];
-    final humidity = <double>[];
-    final cloud = <double>[];
-    final pressure = <double>[];
-    final windSpeed = <double>[];
-    final windDir = <double>[];
-
-    for (final item in timeseries.take(72)) {
-      if (item is! Map) continue;
-      final t = item['time'];
-      final data = item['data'];
-      if (t is! String || data is! Map) continue;
-      final instant = data['instant'];
-      final next1h = data['next_1_hours'];
-      if (instant is! Map) continue;
-      final details = instant['details'];
-      if (details is! Map) continue;
-
-      double numVal(dynamic v, [double fallback = double.nan]) => (v is num) ? v.toDouble() : fallback;
-
-      time.add(t);
-      final temp = numVal(details['air_temperature']);
-      temperature.add(temp);
-      apparent.add(temp);
-      windSpeed.add(numVal(details['wind_speed']));
-      windDir.add(numVal(details['wind_from_direction']));
-      humidity.add(numVal(details['relative_humidity']));
-      cloud.add(numVal(details['cloud_area_fraction']));
-      pressure.add(numVal(details['air_pressure_at_sea_level']));
-
-      double p1h = 0.0;
-      if (next1h is Map) {
-        final pDetails = next1h['details'];
-        if (pDetails is Map) {
-          p1h = numVal(pDetails['precipitation_amount'], 0.0);
-        }
-      }
-      precipitation.add(p1h);
-    }
-
-    return {
-      'hourly': {
-        'time': time,
-        'temperature_2m': temperature,
-        'apparent_temperature': apparent,
-        'precipitation': precipitation,
-        'relativehumidity_2m': humidity,
-        'cloudcover': cloud,
-        'pressure_msl': pressure,
-        'windspeed_10m': windSpeed,
-        'winddirection_10m': windDir,
-      },
-    };
   }
 
   WeatherPoint _normalize(LatLng point, Map<String, dynamic> payload) {
@@ -237,15 +266,15 @@ class WeatherEngineSota {
   }
 
   double _confidenceHeuristic(WeatherPoint p) {
-    if (p.timeline.length < 3) return CyclingConstants.confidenceHeuristicFallback;
+    if (p.timeline.length < 3) return HorizonConstants.confidenceHeuristicFallback;
     final now = _pickNearest(p, DateTime.now().toUtc());
     final idx = p.timeline.indexOf(now);
-    if (idx < 0) return CyclingConstants.confidenceHeuristicFallback;
+    if (idx < 0) return HorizonConstants.confidenceHeuristicFallback;
 
     final next1 = p.timeline.elementAtOrNull(idx + 1);
     final next2 = p.timeline.elementAtOrNull(idx + 2);
 
-    double score = CyclingConstants.confidenceHeuristicBase;
+    double score = HorizonConstants.confidenceHeuristicBase;
 
     double delta(double a, double b) => (a - b).abs();
 
@@ -257,8 +286,8 @@ class WeatherEngineSota {
       score -= min(0.20, delta(now.precipitation, next2.precipitation) / 4.0);
     }
 
-    if (now.precipitation >= CyclingConstants.confidenceHeuristicRainHeavy) score -= 0.2;
-    if (now.precipitation >= CyclingConstants.confidenceHeuristicRainExtreme) score -= 0.2;
+    if (now.precipitation >= HorizonConstants.confidenceHeuristicRainHeavy) score -= 0.2;
+    if (now.precipitation >= HorizonConstants.confidenceHeuristicRainExtreme) score -= 0.2;
 
     return score.clamp(0.25, 0.95);
   }

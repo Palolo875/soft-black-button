@@ -1,4 +1,5 @@
 import 'package:horizon/services/secure_file_store.dart';
+import 'package:horizon/core/log/app_log.dart';
 
 class WeatherCacheEntry {
   final DateTime fetchedAt;
@@ -26,16 +27,119 @@ class WeatherCacheEntry {
 
 class WeatherCache {
   static const _secureEntryPrefix = 'weather_cache_';
+  static const _secureIndexKey = 'weather_cache_index_v1';
 
   final Duration ttl;
   final bool encrypted;
+  final int maxEntries;
   final SecureFileStore _store;
 
   WeatherCache({
     this.ttl = const Duration(minutes: 30),
     this.encrypted = false,
+    this.maxEntries = 256,
     SecureFileStore secureStore = const SecureFileStore(),
   }) : _store = secureStore;
+
+  Future<Map<String, dynamic>> _loadIndex() async {
+    final raw = await _store.readJsonDecrypted(_secureIndexKey);
+    if (raw == null) return <String, dynamic>{'items': <String, dynamic>{}};
+    final items = raw['items'];
+    if (items is! Map) return <String, dynamic>{'items': <String, dynamic>{}};
+    return <String, dynamic>{'items': Map<String, dynamic>.from(items)};
+  }
+
+  Future<void> _saveIndex(Map<String, dynamic> index) async {
+    await _store.writeJsonEncrypted(_secureIndexKey, index);
+  }
+
+  Future<void> _touchIndex(String key, {DateTime? savedAt}) async {
+    final index = await _loadIndex();
+    final items = Map<String, dynamic>.from(index['items'] as Map);
+    final now = DateTime.now().toUtc().toIso8601String();
+    final prev = items[key];
+    if (prev is Map) {
+      final m = Map<String, dynamic>.from(prev);
+      m['lastAccess'] = now;
+      if (savedAt != null) m['savedAt'] = savedAt.toUtc().toIso8601String();
+      items[key] = m;
+    } else {
+      items[key] = {
+        'lastAccess': now,
+        if (savedAt != null) 'savedAt': savedAt.toUtc().toIso8601String(),
+      };
+    }
+    index['items'] = items;
+    await _saveIndex(index);
+
+    if (deleted > 0) {
+      AppLog.d('weatherCache.prune', props: {'deleted': deleted, 'remaining': items.length, 'encrypted': encrypted});
+    }
+  }
+
+  Future<void> _removeFromIndex(String key) async {
+    final index = await _loadIndex();
+    final items = Map<String, dynamic>.from(index['items'] as Map);
+    if (!items.containsKey(key)) return;
+    items.remove(key);
+    index['items'] = items;
+    await _saveIndex(index);
+  }
+
+  Future<void> prune() async {
+    final index = await _loadIndex();
+    final items = Map<String, dynamic>.from(index['items'] as Map);
+    if (items.isEmpty) return;
+
+    final now = DateTime.now().toUtc();
+    final toDelete = <String>[];
+
+    for (final entry in items.entries) {
+      final v = entry.value;
+      if (v is! Map) continue;
+      final savedAtRaw = v['savedAt'];
+      if (savedAtRaw is String) {
+        final savedAt = DateTime.tryParse(savedAtRaw);
+        if (savedAt != null && now.difference(savedAt) > ttl) {
+          toDelete.add(entry.key);
+        }
+      }
+    }
+
+    int deleted = 0;
+    for (final k in toDelete) {
+      await delete(k);
+      items.remove(k);
+      deleted++;
+    }
+
+    if (items.length > maxEntries) {
+      final sortable = <(String, DateTime)>[];
+      for (final entry in items.entries) {
+        final v = entry.value;
+        DateTime t = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+        if (v is Map) {
+          final la = v['lastAccess'];
+          if (la is String) {
+            final parsed = DateTime.tryParse(la);
+            if (parsed != null) t = parsed.toUtc();
+          }
+        }
+        sortable.add((entry.key, t));
+      }
+      sortable.sort((a, b) => a.$2.compareTo(b.$2));
+      final overflow = sortable.length - maxEntries;
+      for (int i = 0; i < overflow; i++) {
+        final k = sortable[i].$1;
+        await delete(k);
+        items.remove(k);
+        deleted++;
+      }
+    }
+
+    index['items'] = items;
+    await _saveIndex(index);
+  }
 
   Future<WeatherCacheEntry?> read(String key) async {
     final payload = await _store.readJsonDecrypted('$_secureEntryPrefix$key');
@@ -43,12 +147,23 @@ class WeatherCache {
     final entry = WeatherCacheEntry.fromJson(payload);
     if (entry == null) return null;
     final age = DateTime.now().difference(entry.fetchedAt);
-    if (age > ttl) return null;
+    if (age > ttl) {
+      await delete(key);
+      return null;
+    }
+    await _touchIndex(key);
     return entry;
   }
 
   Future<void> write(String key, Map<String, dynamic> payload) async {
     final entry = WeatherCacheEntry(fetchedAt: DateTime.now(), payload: payload);
     await _store.writeJsonEncrypted('$_secureEntryPrefix$key', entry.toJson());
+    await _touchIndex(key, savedAt: entry.fetchedAt);
+    await prune();
+  }
+
+  Future<void> delete(String key) async {
+    await _store.delete('$_secureEntryPrefix$key');
+    await _removeFromIndex(key);
   }
 }
